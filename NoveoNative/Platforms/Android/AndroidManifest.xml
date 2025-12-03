@@ -1,0 +1,25 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+	<!-- Required for WebSockets and API calls -->
+	<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+	<uses-permission android:name="android.permission.INTERNET" />
+
+	<!-- Required for File Uploads (Android 12 and below) -->
+	<uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
+	<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+
+	<!-- Required for File Uploads (Android 13 / API 33+) -->
+	<uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
+	<uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
+	<uses-permission android:name="android.permission.READ_MEDIA_AUDIO" />
+
+	<application android:allowBackup="true"
+                 android:icon="@mipmap/appicon"
+                 android:roundIcon="@mipmap/appicon_round"
+                 android:supportsRtl="true"
+                 android:usesCleartextTraffic="true">
+		<!-- 'usesCleartextTraffic' prevents crashes if an image/link is HTTP instead of HTTPS -->
+	</application>
+
+</manifest>

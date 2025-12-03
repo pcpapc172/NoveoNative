@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="NoveoNative.SettingsPage"
+             Title="Settings"
+             BackgroundColor="White">
+    <VerticalStackLayout Padding="20" Spacing="20">
+        <Border StrokeShape="RoundRectangle 60" HeightRequest="120" WidthRequest="120" HorizontalOptions="Center" BackgroundColor="LightGray">
+            <Image x:Name="AvatarImage" Aspect="AspectFill"/>
+        </Border>
+        <Button Text="Upload New Avatar" Clicked="OnUploadAvatar" BackgroundColor="#3b82f6" TextColor="White"/>
+        <Entry x:Name="UsernameEntry" Placeholder="Username" TextColor="Black"/>
+        <Button Text="Save Username" Clicked="OnSaveUsername" BackgroundColor="#3b82f6" TextColor="White"/>
+        <Button Text="Logout" BackgroundColor="Red" TextColor="White" Clicked="OnLogout"/>
+    </VerticalStackLayout>
+</ContentPage>
