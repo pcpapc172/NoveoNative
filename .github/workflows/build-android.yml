@@ -21,9 +21,9 @@ jobs:
       run: dotnet workload install maui-android
 
     - name: Publish APK
-      # FIX: Added -p:TargetFrameworks=... to ignore iOS/Windows requirements
+      # FIX: Added RunAOTCompilation=false to fix the XA1030 error
       run: |
-        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false
+        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false -p:RunAOTCompilation=false
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
