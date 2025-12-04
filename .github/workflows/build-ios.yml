@@ -7,7 +7,7 @@ on:
 
 jobs:
   build:
-    runs-on: macos-26
+    runs-on: macos-15
 
     steps:
     - uses: actions/checkout@v4
@@ -18,15 +18,17 @@ jobs:
         dotnet-version: 9.0.x
 
     - name: Install MAUI Workload
-      run: dotnet workload install maui-ios
+      run: dotnet workload install maui
 
+    # Build the IPA using Ad-Hoc signing (No paid certificate needed)
     - name: Publish iOS IPA
-      # Uses "Ad-Hoc" signing (-) to trick the compiler into making an IPA without a paid cert
       run: |
-        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision="" -o ./ios_output
+        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision=""
 
+    # Find and Upload the IPA
     - name: Upload IPA
       uses: actions/upload-artifact@v4
       with:
         name: Noveo-iOS-IPA
-        path: ios_output/*.ipa
+        # The wildcard **/*.ipa finds the file wherever it landed
+        path: '**/*.ipa'
