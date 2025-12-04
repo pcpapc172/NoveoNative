@@ -2,159 +2,178 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 
-namespace NoveoNative
+namespace NoveoNative;
+
+public partial class ChatListPage : ContentPage, INotifyPropertyChanged
 {
-    public partial class ChatListPage : ContentPage, INotifyPropertyChanged
+    public static NoveoClient Client = new NoveoClient();
+    public ObservableCollection<ChatViewModel> Chats { get; set; } = new ObservableCollection<ChatViewModel>();
+
+    public bool IsDesktop => DeviceInfo.Idiom == DeviceIdiom.Desktop;
+    public GridLength ListColumnWidth => IsDesktop ? new GridLength(300) : GridLength.Star;
+    public GridLength ChatColumnWidth => IsDesktop ? GridLength.Star : new GridLength(0);
+
+    public Color MainBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#111827") : Colors.White;
+    public Color TextColor => SettingsManager.IsDarkMode ? Colors.White : Colors.Black;
+
+    private bool _isListEmpty = true;
+    public bool IsListEmpty { get => _isListEmpty; set { _isListEmpty = value; OnPropertyChanged(); } }
+
+    private bool _isLoginVisible = true;
+    public bool IsLoginVisible { get => _isLoginVisible; set { _isLoginVisible = value; OnPropertyChanged(); } }
+    private bool _isRegisterMode = false;
+    public string LoginBtnText => _isRegisterMode ? "Register" : "Login";
+    public string ToggleBtnText => _isRegisterMode ? "Already have an account? Login" : "Don't have an account? Register";
+
+    public ChatListPage()
     {
-        public static NoveoClient Client = new NoveoClient();
-        public ObservableCollection<ChatViewModel> Chats { get; set; } = new ObservableCollection<ChatViewModel>();
+        InitializeComponent();
+        BindingContext = this;
+        MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
 
-        public bool IsDesktop => DeviceInfo.Idiom == DeviceIdiom.Desktop;
-        public GridLength ListColumnWidth => IsDesktop ? new GridLength(300) : GridLength.Star;
-        public GridLength ChatColumnWidth => IsDesktop ? GridLength.Star : new GridLength(0);
+        var session = SettingsManager.GetSession();
+        if (!string.IsNullOrEmpty(session.Token)) IsLoginVisible = false;
 
-        public Color MainBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#111827") : Colors.White;
-        public Color TextColor => SettingsManager.IsDarkMode ? Colors.White : Colors.Black;
+        ChatListCollectionView.ItemsSource = Chats;
 
-        private bool _isListEmpty = true;
-        public bool IsListEmpty { get => _isListEmpty; set { _isListEmpty = value; OnPropertyChanged(); } }
+        Client.OnLog += (msg) => MainThread.BeginInvokeOnMainThread(() => StatusLabel.Text = msg);
+        Client.OnLoginSuccess += () => MainThread.BeginInvokeOnMainThread(() => { IsLoginVisible = false; LoadChats(); });
+        Client.OnLoginFailed += () => MainThread.BeginInvokeOnMainThread(() => { StatusLabel.Text = "Auth failed."; SettingsManager.ClearSession(); IsLoginVisible = true; });
+        Client.OnChatListUpdated += LoadChats;
+        Client.OnNewChat += (chat) => LoadChats();
+        Client.OnChannelInfo += (chat) => LoadChats();
 
-        // Login Logic
-        private bool _isLoginVisible = true;
-        public bool IsLoginVisible { get => _isLoginVisible; set { _isLoginVisible = value; OnPropertyChanged(); } }
+        if (!IsLoginVisible) CheckAutoLogin();
+    }
 
-        private bool _isRegisterMode = false;
-        public string LoginBtnText => _isRegisterMode ? "Register" : "Login";
-        public string ToggleBtnText => _isRegisterMode ? "Already have an account? Login" : "Don't have an account? Register";
+    private async void CheckAutoLogin()
+    {
+        var session = SettingsManager.GetSession();
+        if (!string.IsNullOrEmpty(session.Token)) { StatusLabel.Text = "Welcome back..."; await Client.Reconnect(session.UserId, session.Token); }
+    }
 
-        public ChatListPage()
+    private void LoadChats()
+    {
+        MainThread.BeginInvokeOnMainThread(() =>
         {
-            InitializeComponent();
-            BindingContext = this;
+            IsListEmpty = false;
+            var newItems = new List<ChatViewModel>();
+            var existingChatIds = new HashSet<string>();
 
-            // Initialize Theme & Session
-            MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
-            var session = SettingsManager.GetSession();
-            if (!string.IsNullOrEmpty(session.Token)) IsLoginVisible = false;
-
-            ChatListCollectionView.ItemsSource = Chats;
-
-            Client.OnLog += (msg) => MainThread.BeginInvokeOnMainThread(() => StatusLabel.Text = msg);
-            Client.OnLoginSuccess += () => MainThread.BeginInvokeOnMainThread(() => { IsLoginVisible = false; LoadChats(); });
-            Client.OnLoginFailed += () => MainThread.BeginInvokeOnMainThread(() => {
-                StatusLabel.Text = "Auth failed.";
-                SettingsManager.ClearSession();
-                IsLoginVisible = true;
-            });
-            Client.OnChatListUpdated += LoadChats;
-
-            if (!IsLoginVisible) CheckAutoLogin();
-        }
-
-        private async void CheckAutoLogin()
-        {
-            var session = SettingsManager.GetSession();
-            if (!string.IsNullOrEmpty(session.Token))
+            // 1. Add Active Chats (History exists)
+            foreach (var c in Client.AllChats)
             {
-                StatusLabel.Text = "Welcome back...";
-                await Client.Reconnect(session.UserId, session.Token);
-            }
-        }
+                string name = c.ChatName ?? "";
+                string avatarUrl = Client.GetFullUrl(c.AvatarUrl);
+                string otherId = "";
+                bool isOnline = false;
 
-        private void LoadChats()
-        {
-            MainThread.BeginInvokeOnMainThread(() =>
-            {
-                if (Client.AllChats == null || Client.AllChats.Count == 0) { IsListEmpty = true; return; }
-                IsListEmpty = false;
-
-                foreach (var c in Client.AllChats)
+                if (c.ChatType == "private" && c.Members != null)
                 {
-                    string name = c.ChatName ?? "";
-                    string avatarUrl = Client.GetFullUrl(c.AvatarUrl);
-                    if (c.ChatType == "private" && c.Members != null)
+                    otherId = c.Members.FirstOrDefault(m => m != Client.CurrentUserId) ?? "";
+                    if (!string.IsNullOrEmpty(otherId))
                     {
-                        var otherId = c.Members.FirstOrDefault(m => m != Client.CurrentUserId);
                         name = Client.GetUserName(otherId);
                         avatarUrl = Client.GetUserAvatar(otherId);
-                    }
-                    if (string.IsNullOrEmpty(name)) name = "Unknown Chat";
-
-                    string preview = "No messages";
-                    if (c.Messages != null && c.Messages.Count > 0)
-                    {
-                        var lastMsg = c.Messages.Last();
-                        var parsed = Client.ParseMessageContent(lastMsg.Content);
-                        if (parsed.IsTheme) preview = "🎨 Theme";
-                        else if (parsed.IsFile) preview = "📎 File";
-                        else preview = parsed.Text;
-                    }
-
-                    var existing = Chats.FirstOrDefault(x => x.ChatId == c.ChatId);
-                    if (existing != null)
-                    {
-                        if (existing.DisplayName != name) existing.DisplayName = name;
-                        if (existing.LastMessagePreview != preview) existing.LastMessagePreview = preview;
-                        if (existing.AvatarUrl != avatarUrl) existing.AvatarUrl = avatarUrl;
-                    }
-                    else
-                    {
-                        Chats.Add(new ChatViewModel
-                        {
-                            ChatId = c.ChatId,
-                            DisplayName = name,
-                            AvatarUrl = avatarUrl,
-                            AvatarLetter = string.IsNullOrEmpty(name) ? "?" : name.Substring(0, 1).ToUpper(),
-                            LastMessagePreview = preview
-                        });
+                        if (Client.Users.ContainsKey(otherId)) isOnline = Client.Users[otherId].IsOnline;
                     }
                 }
-                // Remove deleted
-                for (int i = Chats.Count - 1; i >= 0; i--)
+                if (string.IsNullOrEmpty(name) && c.ChatType == "channel") name = "Channel";
+                if (string.IsNullOrEmpty(name)) name = "Unknown Chat";
+
+                string preview = "No messages";
+                if (c.Messages != null && c.Messages.Count > 0)
                 {
-                    if (!Client.AllChats.Any(c => c.ChatId == Chats[i].ChatId)) Chats.RemoveAt(i);
+                    var lastMsg = c.Messages.Last();
+                    var parsed = Client.ParseMessageContent(lastMsg.Content);
+                    if (parsed.IsTheme) preview = "🎨 Theme";
+                    else if (parsed.IsFile) preview = "📎 File";
+                    else preview = parsed.Text;
                 }
-            });
-        }
 
-        private async void OnLoginClicked(object sender, EventArgs e)
-        {
-            if (string.IsNullOrEmpty(UserEntry.Text) || string.IsNullOrEmpty(PassEntry.Text)) return;
-            StatusLabel.Text = "Connecting...";
-            if (_isRegisterMode) await Client.ConnectAndRegister(UserEntry.Text, PassEntry.Text);
-            else await Client.ConnectAndLogin(UserEntry.Text, PassEntry.Text);
-        }
-
-        private void OnToggleLoginMode(object sender, EventArgs e)
-        {
-            _isRegisterMode = !_isRegisterMode;
-            OnPropertyChanged(nameof(LoginBtnText));
-            OnPropertyChanged(nameof(ToggleBtnText));
-        }
-
-        private void OnToggleTheme(object sender, EventArgs e)
-        {
-            SettingsManager.IsDarkMode = !SettingsManager.IsDarkMode;
-            MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
-            OnPropertyChanged(nameof(MainBgColor));
-            OnPropertyChanged(nameof(TextColor));
-            foreach (var chat in Chats) chat.RefreshColor();
-            if (IsDesktop) DesktopChatView.RefreshColors();
-        }
-
-        private async void OnSettingsClicked(object sender, EventArgs e)
-        {
-            await Navigation.PushAsync(new SettingsPage());
-        }
-
-        private async void OnChatSelected(object sender, SelectionChangedEventArgs e)
-        {
-            if (e.CurrentSelection.FirstOrDefault() is ChatViewModel selectedChat)
-            {
-                if (IsDesktop) DesktopChatView.LoadChat(selectedChat.ChatId);
-                else await Navigation.PushAsync(new MobileChatPage(selectedChat.ChatId, selectedChat.DisplayName));
-                ChatListCollectionView.SelectedItem = null;
+                existingChatIds.Add(c.ChatId);
+                newItems.Add(new ChatViewModel
+                {
+                    ChatId = c.ChatId,
+                    DisplayName = name,
+                    AvatarUrl = avatarUrl,
+                    AvatarLetter = string.IsNullOrEmpty(name) ? "?" : name.Substring(0, 1).ToUpper(),
+                    LastMessagePreview = preview,
+                    IsChannel = c.ChatType == "channel",
+                    IsPrivate = c.ChatType == "private",
+                    OtherUserId = otherId,
+                    IsOnline = isOnline
+                });
             }
+
+            // 2. Add Missing Users (DMs with no history)
+            foreach (var user in Client.Users.Values)
+            {
+                if (user.UserId == Client.CurrentUserId) continue;
+
+                // Calculate expected Chat ID: ID_ID (Sorted)
+                var ids = new List<string> { Client.CurrentUserId, user.UserId };
+                ids.Sort();
+                string expectedId = string.Join("_", ids);
+
+                if (!existingChatIds.Contains(expectedId))
+                {
+                    // Add as a new/empty entry
+                    newItems.Add(new ChatViewModel
+                    {
+                        ChatId = expectedId,
+                        DisplayName = user.Username,
+                        AvatarUrl = Client.GetFullUrl(user.AvatarUrl),
+                        AvatarLetter = user.Username.Substring(0, 1).ToUpper(),
+                        LastMessagePreview = user.IsOnline ? "Online" : "Offline", // Show status
+                        IsPrivate = true,
+                        OtherUserId = user.UserId,
+                        IsOnline = user.IsOnline
+                    });
+                }
+            }
+
+            // 3. Sort and Update UI
+            // Priority: Has Messages > Is Online > Name
+            var sorted = newItems.OrderByDescending(x => x.LastMessagePreview != "Online" && x.LastMessagePreview != "Offline")
+                                 .ThenByDescending(x => x.IsOnline)
+                                 .ToList();
+
+            Chats.Clear();
+            foreach (var item in sorted) Chats.Add(item);
+
+            if (Chats.Count == 0) IsListEmpty = true;
+        });
+    }
+
+    private void OnToggleLoginMode(object sender, EventArgs e) { _isRegisterMode = !_isRegisterMode; OnPropertyChanged(nameof(LoginBtnText)); OnPropertyChanged(nameof(ToggleBtnText)); }
+    private async void OnLoginClicked(object sender, EventArgs e)
+    {
+        if (string.IsNullOrEmpty(UserEntry.Text) || string.IsNullOrEmpty(PassEntry.Text)) return;
+        StatusLabel.Text = "Connecting...";
+        if (_isRegisterMode) await Client.ConnectAndRegister(UserEntry.Text, PassEntry.Text);
+        else await Client.ConnectAndLogin(UserEntry.Text, PassEntry.Text);
+    }
+    private void OnToggleTheme(object sender, EventArgs e)
+    {
+        SettingsManager.IsDarkMode = !SettingsManager.IsDarkMode; MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
+        OnPropertyChanged(nameof(MainBgColor)); OnPropertyChanged(nameof(TextColor));
+        foreach (var chat in Chats) chat.RefreshColor();
+        if (IsDesktop) DesktopChatView.RefreshColors();
+    }
+    private async void OnSettingsClicked(object sender, EventArgs e) { await Navigation.PushAsync(new SettingsPage()); }
+    private void OnCreateChannel(object sender, EventArgs e) { Navigation.PushAsync(new CreateChannelPage()); }
+
+    private async void OnChatSelected(object sender, SelectionChangedEventArgs e)
+    {
+        if (e.CurrentSelection.FirstOrDefault() is ChatViewModel selectedChat)
+        {
+            // Determine Recipient ID if it's a DM
+            string recipientId = selectedChat.IsPrivate ? selectedChat.OtherUserId : null;
+
+            if (IsDesktop) DesktopChatView.LoadChat(selectedChat.ChatId, recipientId);
+            else await Navigation.PushAsync(new MobileChatPage(selectedChat.ChatId, selectedChat.DisplayName, recipientId));
+            ChatListCollectionView.SelectedItem = null;
         }
     }
 }

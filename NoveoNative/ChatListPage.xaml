@@ -4,10 +4,10 @@
              xmlns:local="clr-namespace:NoveoNative"
              x:Class="NoveoNative.ChatListPage"
              Title="Noveo"
-             BackgroundColor="{Binding MainBgColor}"
-             x:DataType="local:ChatListPage">
+             BackgroundColor="{Binding MainBgColor}">
 
     <ContentPage.ToolbarItems>
+        <ToolbarItem Text="+" Clicked="OnCreateChannel"/>
         <ToolbarItem Text="⚙" Clicked="OnSettingsClicked"/>
         <ToolbarItem Text="🌙" Clicked="OnToggleTheme"/>
     </ContentPage.ToolbarItems>
@@ -18,16 +18,12 @@
             <Grid.GestureRecognizers>
                 <TapGestureRecognizer/>
             </Grid.GestureRecognizers>
-
             <VerticalStackLayout VerticalOptions="Center" Padding="30" Spacing="15">
                 <Label Text="Noveo Native" FontSize="32" TextColor="#3b82f6" HorizontalOptions="Center" FontAttributes="Bold"/>
-
                 <Entry x:Name="UserEntry" Placeholder="Username" TextColor="{Binding TextColor}" PlaceholderColor="Gray"/>
                 <Entry x:Name="PassEntry" Placeholder="Password" IsPassword="True" TextColor="{Binding TextColor}" PlaceholderColor="Gray"/>
-
                 <Button Text="{Binding LoginBtnText}" BackgroundColor="#3b82f6" TextColor="White" Clicked="OnLoginClicked"/>
                 <Button Text="{Binding ToggleBtnText}" BackgroundColor="Transparent" TextColor="Gray" Clicked="OnToggleLoginMode" FontSize="12"/>
-
                 <Label x:Name="StatusLabel" TextColor="Red" HorizontalOptions="Center"/>
             </VerticalStackLayout>
         </Grid>
@@ -43,18 +39,37 @@
             <Grid Grid.Column="0" BackgroundColor="{Binding MainBgColor}">
                 <Grid RowDefinitions="Auto, *">
                     <Label Grid.Row="1" Text="No active chats." TextColor="Gray" HorizontalOptions="Center" VerticalOptions="Center" IsVisible="{Binding IsListEmpty}"/>
+
                     <CollectionView x:Name="ChatListCollectionView" Grid.Row="1" SelectionMode="Single" SelectionChanged="OnChatSelected">
                         <CollectionView.ItemTemplate>
                             <DataTemplate x:DataType="local:ChatViewModel">
                                 <Grid Padding="10" ColumnDefinitions="60,*" BackgroundColor="Transparent">
-                                    <Border Grid.Column="0" StrokeShape="RoundRectangle 30" HeightRequest="60" WidthRequest="60" BackgroundColor="#3b82f6" StrokeThickness="0">
-                                        <Label Text="{Binding AvatarLetter}" TextColor="White" FontSize="24" FontAttributes="Bold" HorizontalOptions="Center" VerticalOptions="Center"/>
-                                    </Border>
-                                    <Image Grid.Column="0" Source="{Binding AvatarUrl}" Aspect="AspectFill" HeightRequest="60" WidthRequest="60">
-                                        <Image.Clip>
-                                            <EllipseGeometry Center="30,30" RadiusX="30" RadiusY="30"/>
-                                        </Image.Clip>
-                                    </Image>
+
+                                    <!-- AVATAR CONTAINER -->
+                                    <Grid Grid.Column="0" HeightRequest="60" WidthRequest="60">
+                                        <!-- 1. Letter Background (Dynamic Color) -->
+                                        <Border StrokeShape="RoundRectangle 30" BackgroundColor="{Binding AvatarBgColor}" StrokeThickness="0">
+                                            <Label Text="{Binding AvatarLetter}" TextColor="White" FontSize="24" FontAttributes="Bold" HorizontalOptions="Center" VerticalOptions="Center"/>
+                                        </Border>
+
+                                        <!-- 2. Image (If exists) -->
+                                        <Image Source="{Binding AvatarUrl}" Aspect="AspectFill" HeightRequest="60" WidthRequest="60">
+                                            <Image.Clip>
+                                                <EllipseGeometry Center="30,30" RadiusX="30" RadiusY="30"/>
+                                            </Image.Clip>
+                                        </Image>
+
+                                        <!-- 3. Online Status Dot (Bottom Right) -->
+                                        <Border IsVisible="{Binding OnlineStatusVisible}"
+                                                BackgroundColor="{Binding OnlineStatusColor}"
+                                                Stroke="White" StrokeThickness="2"
+                                                HeightRequest="16" WidthRequest="16"
+                                                HorizontalOptions="End" VerticalOptions="End"
+                                                Margin="0,0,2,2"
+                                                StrokeShape="RoundRectangle 8"/>
+                                    </Grid>
+
+                                    <!-- TEXT INFO -->
                                     <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Padding="10,0,0,0">
                                         <Label Text="{Binding DisplayName}" FontSize="18" FontAttributes="Bold" TextColor="{Binding DisplayTextColor}"/>
                                         <Label Text="{Binding LastMessagePreview}" FontSize="14" TextColor="Gray" LineBreakMode="TailTruncation"/>
@@ -66,7 +81,7 @@
                 </Grid>
             </Grid>
 
-            <!-- RIGHT: CHAT (Desktop Only) -->
+            <!-- RIGHT: CHAT -->
             <local:ChatView x:Name="DesktopChatView" Grid.Column="1" IsVisible="{Binding IsDesktop}"/>
         </Grid>
     </Grid>

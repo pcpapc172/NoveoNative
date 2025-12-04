@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="NoveoNative.CreateChannelPage"
+             x:Name="ThisPage"
+             Title="Create Channel"
+             BackgroundColor="White">
+
+    <ScrollView>
+        <VerticalStackLayout Padding="20" Spacing="20">
+            <Label Text="Create a New Channel" FontSize="24" FontAttributes="Bold" TextColor="#3b82f6"/>
+
+            <!-- Avatar Preview -->
+            <Border StrokeShape="RoundRectangle 20" HeightRequest="120" WidthRequest="120" HorizontalOptions="Center" BackgroundColor="LightGray">
+                <Grid>
+                    <Label Text="#" FontSize="48" TextColor="White" HorizontalOptions="Center" VerticalOptions="Center" IsVisible="{Binding ShowDefaultAvatar}"/>
+                    <Image x:Name="AvatarPreview" Aspect="AspectFill" IsVisible="{Binding HasSelectedAvatar}"/>
+                </Grid>
+            </Border>
+
+            <Button Text="Choose Channel Avatar" Clicked="OnSelectAvatar" BackgroundColor="#3b82f6" TextColor="White"/>
+
+            <!-- Channel Name -->
+            <Label Text="Channel Name" FontAttributes="Bold" TextColor="Black"/>
+            <Entry x:Name="ChannelNameEntry" Placeholder="e.g., Tech News" TextColor="Black"/>
+
+            <!-- Channel Handle -->
+            <Label Text="Channel Handle" FontAttributes="Bold" TextColor="Black"/>
+            <HorizontalStackLayout Spacing="5">
+                <Label Text="@" FontSize="18" TextColor="Gray" VerticalOptions="Center"/>
+                <Entry x:Name="HandleEntry" Placeholder="technews" TextColor="Black" HorizontalOptions="FillAndExpand"/>
+            </HorizontalStackLayout>
+            <Label Text="Only letters, numbers, and underscores" FontSize="12" TextColor="Gray"/>
+
+            <!-- Description -->
+            <Label Text="Description (Optional)" FontAttributes="Bold" TextColor="Black"/>
+            <Editor x:Name="DescriptionEditor" Placeholder="What's this channel about?" TextColor="Black" HeightRequest="100"/>
+
+            <Label x:Name="StatusLabel" TextColor="Red" HorizontalOptions="Center" IsVisible="False"/>
+
+            <Button Text="Create Channel" BackgroundColor="#22c55e" TextColor="White" Clicked="OnCreateChannel"/>
+        </VerticalStackLayout>
+    </ScrollView>
+</ContentPage>

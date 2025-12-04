@@ -38,7 +38,7 @@
 		<AndroidCreatePackagePerAbi>false</AndroidCreatePackagePerAbi>
 		<RuntimeIdentifiers>android-arm;android-arm64;android-x86;android-x64</RuntimeIdentifiers>
 		<AndroidLinkMode>None</AndroidLinkMode>
-		<PublishTrimmed>false</PublishTrimmed>
+		<PublishTrimmed>True</PublishTrimmed>
 		<EmbedAssembliesIntoApk>true</EmbedAssembliesIntoApk>
 	</PropertyGroup>
 
@@ -73,6 +73,12 @@
 	<ItemGroup>
 		<PackageReference Include="Microsoft.Maui.Controls" Version="$(MauiVersion)" />
 		<PackageReference Include="Microsoft.Extensions.Logging.Debug" Version="9.0.0" />
+	</ItemGroup>
+
+	<ItemGroup>
+	  <MauiXaml Update="CreateChannelPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
 	</ItemGroup>
 
 </Project>

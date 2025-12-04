@@ -13,17 +13,28 @@ namespace NoveoNative
         [JsonPropertyName("user")] public User? User { get; set; }
         [JsonPropertyName("users")] public List<User>? Users { get; set; }
         [JsonPropertyName("chats")] public List<Chat>? Chats { get; set; }
+        [JsonPropertyName("chat")] public Chat? Chat { get; set; }
+        [JsonPropertyName("channel")] public Chat? Channel { get; set; }
 
         [JsonPropertyName("messageId")] public string? MessageId { get; set; }
         [JsonPropertyName("chatId")] public string? ChatId { get; set; }
         [JsonPropertyName("senderId")] public string? SenderId { get; set; }
         [JsonPropertyName("content")] public object? Content { get; set; }
+        [JsonPropertyName("newContent")] public object? NewContent { get; set; }
         [JsonPropertyName("timestamp")] public long Timestamp { get; set; }
+        [JsonPropertyName("editedAt")] public long? EditedAt { get; set; }
         [JsonPropertyName("token")] public string? Token { get; set; }
         [JsonPropertyName("replyToId")] public string? ReplyToId { get; set; }
-
-        // --- FIX: ADDED THIS PROPERTY ---
         [JsonPropertyName("message")] public string? ErrorMessage { get; set; }
+        [JsonPropertyName("publicChatId")] public string? PublicChatId { get; set; }
+
+        // Pinned
+        [JsonPropertyName("pinnedMessage")] public object? PinnedMessage { get; set; }
+
+        // Presence info often comes in the user list or separate event
+        [JsonPropertyName("userId")] public string? UserId { get; set; }
+        [JsonPropertyName("online")] public object? OnlineData { get; set; }
+        [JsonPropertyName("members")] public List<string>? Members { get; set; }
     }
 
     public class User
@@ -31,6 +42,7 @@ namespace NoveoNative
         [JsonPropertyName("userId")] public string UserId { get; set; } = "";
         [JsonPropertyName("username")] public string Username { get; set; } = "Unknown";
         [JsonPropertyName("avatarUrl")] public string? AvatarUrl { get; set; }
+        public bool IsOnline { get; set; }
     }
 
     public class Chat
@@ -41,6 +53,11 @@ namespace NoveoNative
         [JsonPropertyName("messages")] public List<ServerMessage>? Messages { get; set; }
         [JsonPropertyName("members")] public List<string>? Members { get; set; }
         [JsonPropertyName("avatarUrl")] public string? AvatarUrl { get; set; }
+        [JsonPropertyName("ownerId")] public string? OwnerId { get; set; }
+        [JsonPropertyName("handle")] public string? Handle { get; set; }
+        [JsonPropertyName("pinnedMessage")] public object? PinnedMessage { get; set; }
+
+        public long LastMessageTimestamp { get; set; }
     }
 
     public class FileAttachment
@@ -55,15 +72,13 @@ namespace NoveoNative
         public string Text { get; set; } = "";
         public bool IsTheme { get; set; }
         public string ThemeName { get; set; } = "";
-
         public bool IsFile { get; set; }
         public bool IsImage { get; set; }
         public bool IsVideo { get; set; }
         public bool IsAudio { get; set; }
         public string FileName { get; set; } = "";
         public string FileUrl { get; set; } = "";
-
-        // Forwarding
+        public long FileSize { get; set; }
         public bool IsForwarded { get; set; }
         public string ForwardedFrom { get; set; } = "";
     }
@@ -77,13 +92,13 @@ namespace NoveoNative
         private readonly string _serverUrl = $"wss://{DOMAIN}/ws";
         private readonly string _uploadBaseUrl = $"https://{DOMAIN}/upload";
 
-        public Dictionary<string, string> UserNames = new Dictionary<string, string>();
-        public Dictionary<string, string> UserAvatars = new Dictionary<string, string>();
+        public Dictionary<string, User> Users = new Dictionary<string, User>();
         public List<Chat> AllChats { get; private set; } = new List<Chat>();
 
         public string CurrentUserId { get; private set; } = "";
         public string CurrentUsername { get; private set; } = "";
         public string CurrentUserAvatar { get; private set; } = "";
+        public string PublicChatId { get; private set; } = ""; // FIX ERROR
         private string _authToken = "";
 
         // Events
@@ -93,19 +108,23 @@ namespace NoveoNative
         public event Action? OnChatListUpdated;
         public event Action<ServerMessage?>? OnMessageReceived;
         public event Action<string, string>? OnMessageDeleted;
+        public event Action<string, object?>? OnMessageUpdated;
         public event Action<double>? OnUploadProgress;
+
+        // MISSING EVENTS FIXED
+        public event Action<Chat>? OnNewChat;
+        public event Action<Chat>? OnChannelInfo;
+        public event Action<string, bool>? OnPresenceUpdate;
 
         // --- AUTH ---
         public async Task ConnectAndLogin(string username, string password)
         {
             await ConnectAndSend(JsonSerializer.Serialize(new { type = "login_with_password", username, password }));
         }
-
         public async Task ConnectAndRegister(string username, string password)
         {
             await ConnectAndSend(JsonSerializer.Serialize(new { type = "register", username, password }));
         }
-
         public async Task Reconnect(string userId, string token)
         {
             await ConnectAndSend(JsonSerializer.Serialize(new { type = "reconnect", userId, token }));
@@ -125,32 +144,74 @@ namespace NoveoNative
             catch (Exception ex) { OnLog?.Invoke($"Connection Failed: {ex.Message}"); OnLoginFailed?.Invoke(); }
         }
 
-        // --- MESSAGING ---
-        public async Task SendMessage(string chatId, string text, object? fileObj = null, string? replyToId = null, object? forwardedInfo = null)
+        // --- MESSAGING & API ---
+        // --- UPDATED: Accepts recipientId for new DMs ---
+        public async Task SendMessage(string chatId, string text, object? fileObj = null, string? replyToId = null, object? forwardedInfo = null, string? recipientId = null)
         {
-            var contentData = new Dictionary<string, object>();
+            var contentData = new Dictionary<string, object?>();
             contentData["text"] = text ?? "";
             contentData["file"] = fileObj;
             contentData["theme"] = null;
             if (forwardedInfo != null) contentData["forwardedInfo"] = forwardedInfo;
 
-            var msg = new { type = "message", chatId, replyToId, content = contentData };
+            // Construct message payload
+            var msg = new Dictionary<string, object>
+            {
+                { "type", "message" },
+                { "chatId", chatId },
+                { "content", contentData }
+            };
+
+            if (replyToId != null) msg["replyToId"] = replyToId;
+
+            // Crucial fix for new DMs: Pass recipientId if we have it
+            if (recipientId != null) msg["recipientId"] = recipientId;
+
             await SendRaw(JsonSerializer.Serialize(msg));
         }
+        public async Task DeleteMessage(string chatId, string messageId) { await SendRaw(JsonSerializer.Serialize(new { type = "delete_message", chatId, messageId })); }
+        public async Task UpdateUsername(string newName) { await SendRaw(JsonSerializer.Serialize(new { type = "update_username", username = newName })); CurrentUsername = newName; }
+        public async Task GetChannelByHandle(string handle) { await SendRaw(JsonSerializer.Serialize(new { type = "get_channel_by_handle", handle })); }
 
-        public async Task DeleteMessage(string chatId, string messageId)
+        // FIX MISSING METHODS
+        public async Task PinMessage(string chatId, string messageId) { await SendRaw(JsonSerializer.Serialize(new { type = "pin_message", chatId, messageId })); }
+        public async Task UnpinMessage(string chatId) { await SendRaw(JsonSerializer.Serialize(new { type = "unpin_message", chatId })); }
+        public async Task JoinChannel(string chatId) { await SendRaw(JsonSerializer.Serialize(new { type = "join_channel", chatId })); }
+
+        // FIX MISSING CreateChannel
+        public async Task CreateChannel(string name, string handle, FileResult? avatar = null)
         {
-            var msg = new { type = "delete_message", chatId, messageId };
-            await SendRaw(JsonSerializer.Serialize(msg));
+            try
+            {
+                using var content = new MultipartFormDataContent();
+                content.Add(new StringContent(name), "name");
+                content.Add(new StringContent(handle), "handle");
+
+                if (avatar != null)
+                {
+                    using var stream = await avatar.OpenReadAsync();
+                    var streamContent = new StreamContent(stream);
+                    streamContent.Headers.ContentType = new MediaTypeHeaderValue(avatar.ContentType);
+                    content.Add(streamContent, "avatar", avatar.FileName);
+                }
+
+                using var client = new HttpClient();
+                client.DefaultRequestHeaders.Add("X-User-ID", CurrentUserId);
+                client.DefaultRequestHeaders.Add("X-Auth-Token", _authToken);
+
+                var response = await client.PostAsync($"https://{DOMAIN}/create_channel", content);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var errorText = await response.Content.ReadAsStringAsync();
+                    OnLog?.Invoke($"Channel creation failed: {errorText}");
+                }
+            }
+            catch (Exception ex)
+            {
+                OnLog?.Invoke($"Channel creation error: {ex.Message}");
+            }
         }
 
-        public async Task UpdateUsername(string newName)
-        {
-            await SendRaw(JsonSerializer.Serialize(new { type = "update_username", username = newName }));
-            CurrentUsername = newName;
-        }
-
-        // --- UPLOADS ---
         public async Task<FileAttachment?> UploadFile(FileResult file, string endpoint = "file")
         {
             try
@@ -240,37 +301,93 @@ namespace NoveoNative
                             CurrentUsername = data.User.Username;
                             CurrentUserAvatar = GetFullUrl(data.User.AvatarUrl);
                             _authToken = data.Token ?? "";
+                            PublicChatId = data.PublicChatId ?? "";
                             SettingsManager.SaveSession(CurrentUserId, data.Token ?? "", data.User.Username);
                         }
                         OnLoginSuccess?.Invoke();
                         break;
                     case "auth_failed":
                     case "error":
-                        OnLog?.Invoke($"Error: {data.ErrorMessage}");
                         if (data.ErrorMessage?.ToLower().Contains("auth") == true) OnLoginFailed?.Invoke();
                         break;
                     case "user_list_update":
                         if (data.Users != null)
                         {
-                            foreach (var u in data.Users) { UserNames[u.UserId] = u.Username; if (!string.IsNullOrEmpty(u.AvatarUrl)) UserAvatars[u.UserId] = u.AvatarUrl; }
+                            // FIX: Parse online status
+                            List<string> onlineIds = new List<string>();
+                            try
+                            {
+                                if (json.Contains("\"online\""))
+                                {
+                                    var doc = JsonDocument.Parse(json);
+                                    if (doc.RootElement.TryGetProperty("online", out var onlineProp) && onlineProp.ValueKind == JsonValueKind.Array)
+                                        onlineIds = JsonSerializer.Deserialize<List<string>>(onlineProp.GetRawText()) ?? new List<string>();
+                                }
+                            }
+                            catch { }
+
+                            foreach (var u in data.Users)
+                            {
+                                u.IsOnline = onlineIds.Contains(u.UserId);
+                                Users[u.UserId] = u;
+                            }
                             OnChatListUpdated?.Invoke();
                         }
                         break;
-                    case "chat_history": if (data.Chats != null) { AllChats = data.Chats; OnChatListUpdated?.Invoke(); } break;
-
+                    case "chat_history":
+                        if (data.Chats != null)
+                        {
+                            AllChats = data.Chats;
+                            foreach (var c in AllChats)
+                            {
+                                if (c.Messages != null && c.Messages.Count > 0) c.LastMessageTimestamp = c.Messages.Last().Timestamp;
+                            }
+                            OnChatListUpdated?.Invoke();
+                        }
+                        break;
                     case "message":
                         var chat = AllChats.FirstOrDefault(c => c.ChatId == data.ChatId);
-                        if (chat != null) { chat.Messages ??= new List<ServerMessage>(); if (!chat.Messages.Any(m => m.MessageId == data.MessageId)) chat.Messages.Add(data); }
+                        if (chat != null)
+                        {
+                            chat.Messages ??= new List<ServerMessage>();
+                            if (!chat.Messages.Any(m => m.MessageId == data.MessageId))
+                            {
+                                chat.Messages.Add(data);
+                                chat.LastMessageTimestamp = data.Timestamp;
+                            }
+                        }
                         OnMessageReceived?.Invoke(data); OnChatListUpdated?.Invoke();
                         break;
-
+                    case "new_chat_info":
+                        if (data.Chat != null)
+                        {
+                            if (!AllChats.Any(c => c.ChatId == data.Chat.ChatId)) AllChats.Add(data.Chat);
+                            OnNewChat?.Invoke(data.Chat); OnChatListUpdated?.Invoke();
+                        }
+                        break;
+                    case "channel_info":
+                        if (data.Channel != null)
+                        {
+                            if (!AllChats.Any(c => c.ChatId == data.Channel.ChatId)) AllChats.Add(data.Channel);
+                            OnChannelInfo?.Invoke(data.Channel); OnChatListUpdated?.Invoke();
+                        }
+                        break;
                     case "message_deleted":
                         var dChat = AllChats.FirstOrDefault(c => c.ChatId == data.ChatId);
-                        if (dChat != null && dChat.Messages != null)
-                        {
-                            dChat.Messages.RemoveAll(m => m.MessageId == data.MessageId);
-                        }
+                        if (dChat != null && dChat.Messages != null) dChat.Messages.RemoveAll(m => m.MessageId == data.MessageId);
                         OnMessageDeleted?.Invoke(data.MessageId ?? "", data.ChatId ?? "");
+                        break;
+                    case "message_updated":
+                        OnMessageUpdated?.Invoke(data.MessageId ?? "", data.NewContent);
+                        break;
+                    case "presence_update":
+                        // Simple presence update check
+                        bool isOnline = json.Contains("\"online\":true");
+                        if (!string.IsNullOrEmpty(data.UserId))
+                        {
+                            if (Users.ContainsKey(data.UserId)) Users[data.UserId].IsOnline = isOnline;
+                            OnPresenceUpdate?.Invoke(data.UserId, isOnline);
+                        }
                         break;
                 }
             }
@@ -314,6 +431,7 @@ namespace NoveoNative
                         if (fileProp.ValueKind == JsonValueKind.String) try { fileRoot = JsonDocument.Parse(fileProp.GetString()).RootElement; } catch { }
                         if (fileRoot.TryGetProperty("name", out var fName)) result.FileName = fName.GetString() ?? "File";
                         if (fileRoot.TryGetProperty("url", out var fUrl)) result.FileUrl = GetFullUrl(fUrl.GetString());
+                        if (fileRoot.TryGetProperty("size", out var fSize)) result.FileSize = fSize.TryGetInt64(out long size) ? size : 0;
                         if (fileRoot.TryGetProperty("type", out var fType))
                         {
                             string type = (fType.GetString() ?? "").ToLower();
@@ -335,7 +453,8 @@ namespace NoveoNative
             return result;
         }
 
-        public string GetUserName(string? userId) => string.IsNullOrEmpty(userId) ? "Unknown" : (userId == CurrentUserId ? "You" : (UserNames.ContainsKey(userId) ? UserNames[userId] : "User"));
-        public string GetUserAvatar(string? userId) => (userId != null && UserAvatars.ContainsKey(userId)) ? GetFullUrl(UserAvatars[userId]) : "";
+        public string GetUserName(string? userId) => string.IsNullOrEmpty(userId) ? "Unknown" : (userId == CurrentUserId ? "You" : (Users.ContainsKey(userId) ? Users[userId].Username : "User"));
+        public string GetUserAvatar(string? userId) => (userId != null && Users.ContainsKey(userId)) ? GetFullUrl(Users[userId].AvatarUrl) : "";
+        public bool IsUserOnline(string? userId) => userId != null && Users.ContainsKey(userId) && Users[userId].IsOnline;
     }
 }
