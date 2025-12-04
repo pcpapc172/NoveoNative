@@ -21,13 +21,12 @@ jobs:
       run: dotnet workload install maui-windows
 
     - name: Publish Windows App
-      # Builds a Self-Contained Unpackaged EXE
+      # Simplified command relying on .csproj settings
       run: |
-        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release -p:RuntimeIdentifier=win-x64 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false --self-contained true
+        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release
 
     - name: Upload Windows Build
       uses: actions/upload-artifact@v4
       with:
         name: Noveo-Windows-Portable
-        # Uploads the entire publish folder containing the EXE and required DLLs
         path: NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/
