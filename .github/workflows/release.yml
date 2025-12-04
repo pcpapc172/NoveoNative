@@ -1,6 +1,5 @@
 name: Create Release
 
-# Trigger ONLY when you push a tag starting with "v" (e.g. v1.0, v1.0.5)
 on:
   push:
     tags:
@@ -10,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  # 1. BUILD ANDROID (Using your working command)
+  # 1. BUILD ANDROID
   build-android:
     runs-on: windows-latest
     steps:
@@ -22,8 +21,9 @@ jobs:
       - name: Install MAUI Workload
         run: dotnet workload install maui-android
       - name: Publish APK
+        # Includes fixes for resources and trimming
         run: |
-          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release /p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false -p:RunAOTCompilation=false -p:AndroidLinkMode=None -p:AndroidEnableProguard=false -p:AndroidEnableSGenConcurrent=true -p:PublishTrimmed=false -p:TrimMode=none
+          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false -p:RunAOTCompilation=false -p:AndroidLinkMode=None -p:PublishTrimmed=false -p:SatelliteResourceLanguages="en"
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -42,10 +42,10 @@ jobs:
       - name: Install MAUI Workload
         run: dotnet workload install maui-windows
       - name: Publish Windows
+        # Includes fixes for platform targeting
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release -p:TargetFrameworks=net9.0-windows10.0.19041.0 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false --self-contained true
       
-      # Zip the Windows build (because it has many files)
       - name: Zip Windows Build
         run: |
           powershell Compress-Archive -Path NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/* -DestinationPath NoveoWindows.zip
@@ -58,6 +58,8 @@ jobs:
 
   # 3. BUILD iOS
   build-ios:
+    # Set to macos-26 as requested. 
+    # If this fails with "Runner not found", GitHub hasn't added the label yet -> switch to 'macos-latest'
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
@@ -68,6 +70,7 @@ jobs:
       - name: Install MAUI Workload
         run: dotnet workload install maui-ios
       - name: Publish IPA
+        # Uses Ad-Hoc signing (-) and Suppresses Version Check to fix the .NET 9 bug
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:TargetFrameworks=net9.0-ios -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision="" -o ./ios_output
       - name: Upload iOS Artifact
@@ -76,7 +79,7 @@ jobs:
           name: iOS-IPA
           path: ios_output/*.ipa
 
-  # 4. PUBLISH RELEASE (Runs after all builds finish)
+  # 4. PUBLISH RELEASE
   create-release:
     needs: [build-android, build-windows, build-ios]
     runs-on: ubuntu-latest
@@ -99,8 +102,6 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-        
-          # Attach the files we just downloaded
           files: |
             *.apk
             *.ipa
