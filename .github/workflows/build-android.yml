@@ -21,10 +21,8 @@ jobs:
       run: dotnet workload install maui-android
 
     - name: Publish APK
-      # FIX: Added -p:SatelliteResourceLanguages="en" to fix the "Could not find path" error.
-      # FIX: Added -p:AndroidLinkMode=None to ensure no code trimming happens.
       run: |
-        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false -p:RunAOTCompilation=false -p:AndroidLinkMode=None -p:SatelliteResourceLanguages="en"
+        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false -p:RunAOTCompilation=false -p:AndroidLinkMode=None -p:AndroidEnableProguard=false -p:AndroidEnableSGenConcurrent=true -p:PublishTrimmed=false -p:TrimMode=none
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
