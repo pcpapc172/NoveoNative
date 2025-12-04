@@ -1,0 +1,33 @@
+name: Build Android APK
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup .NET 9.0
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: 9.0.x
+
+    - name: Install MAUI Workload
+      run: dotnet workload install maui-android
+
+    - name: Publish APK
+      # Builds a Release APK. 
+      # Note: We point to NoveoNative/NoveoNative.csproj assuming your folder structure.
+      run: |
+        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:AndroidPackageFormat=apk -p:AndroidCreatePackagePerAbi=false -p:RuntimeIdentifiers="android-arm;android-arm64;android-x86;android-x64" -p:AndroidKeyStore=false
+
+    - name: Upload APK
+      uses: actions/upload-artifact@v4
+      with:
+        name: Noveo-Android-APK
+        path: NoveoNative/bin/Release/net9.0-android/publish/*.apk
