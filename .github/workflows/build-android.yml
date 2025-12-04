@@ -21,13 +21,12 @@ jobs:
       run: dotnet workload install maui-android
 
     - name: Publish APK
-      # Simplified command. It relies on the settings we added to NoveoNative.csproj
+      # FIX: Added -p:TargetFrameworks=... to ignore iOS/Windows requirements
       run: |
-        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release
+        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Noveo-Android-APK
-        # Path might vary slightly, wildcard * helps find it
         path: NoveoNative/bin/Release/net9.0-android/publish/*.apk
