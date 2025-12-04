@@ -21,13 +21,13 @@ jobs:
       run: dotnet workload install maui-android
 
     - name: Publish APK
-      # Builds a Release APK. 
-      # Note: We point to NoveoNative/NoveoNative.csproj assuming your folder structure.
+      # Simplified command. It relies on the settings we added to NoveoNative.csproj
       run: |
-        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:AndroidPackageFormat=apk -p:AndroidCreatePackagePerAbi=false -p:RuntimeIdentifiers="android-arm;android-arm64;android-x86;android-x64" -p:AndroidKeyStore=false
+        dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release
 
     - name: Upload APK
       uses: actions/upload-artifact@v4
       with:
         name: Noveo-Android-APK
+        # Path might vary slightly, wildcard * helps find it
         path: NoveoNative/bin/Release/net9.0-android/publish/*.apk
