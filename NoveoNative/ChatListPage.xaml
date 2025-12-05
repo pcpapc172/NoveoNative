@@ -119,18 +119,33 @@
             <local:ChatView x:Name="DesktopChatView" Grid.Column="1" IsVisible="{Binding IsDesktop}"/>
         </Grid>
 
-        <!-- HAMBURGER MENU DRAWER (Overlay) -->
+        <!-- ✅ Menu Backdrop (Tap to close) - UPDATED with Opacity 0 -->
+        <BoxView x:Name="MenuBackdrop" 
+                 Color="Black" 
+                 Opacity="0"
+                 IsVisible="False" 
+                 ZIndex="99"
+                 InputTransparent="False">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnMenuBackdropTapped"/>
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
+        <!-- ✅ HAMBURGER MENU DRAWER (Overlay) - UPDATED for smooth animation -->
         <Border x:Name="MenuDrawer"
                 Grid.Row="0"
                 BackgroundColor="{Binding MainBgColor}"
-                StrokeThickness="0"
+                StrokeThickness="1"
+                Stroke="Gray"
                 Margin="0"
                 Padding="0"
                 IsVisible="False"
                 ZIndex="100"
                 WidthRequest="250"
                 HorizontalOptions="Start"
-                VerticalOptions="Fill">
+                VerticalOptions="Fill"
+                TranslationX="-250">
+
             <VerticalStackLayout Spacing="0" Padding="0">
                 <!-- Menu Header -->
                 <Border BackgroundColor="#3b82f6" Padding="20,15" StrokeThickness="0">
@@ -142,40 +157,43 @@
 
                     <!-- Dark Mode Toggle -->
                     <Border Padding="20,15" StrokeThickness="0" BackgroundColor="{Binding MainBgColor}">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnToggleTheme"/>
+                        </Border.GestureRecognizers>
                         <Grid ColumnDefinitions="*,Auto">
                             <Label Grid.Column="0" Text="Dark Mode" TextColor="{Binding TextColor}" FontSize="16" VerticalOptions="Center"/>
                             <Switch Grid.Column="1" x:Name="ThemeSwitch" IsToggled="{x:Static local:SettingsManager.IsDarkMode}" Toggled="OnToggleTheme" OnColor="#3b82f6"/>
                         </Grid>
                     </Border>
 
-                    <!-- Settings -->
-                    <Border Padding="20,15" StrokeThickness="1" BackgroundColor="{Binding MainBgColor}">
+                    <!-- Divider -->
+                    <BoxView HeightRequest="1" BackgroundColor="Gray" Opacity="0.3"/>
 
+                    <!-- Settings -->
+                    <Border Padding="20,15" StrokeThickness="0" BackgroundColor="{Binding MainBgColor}">
+                        <Border.GestureRecognizers>
+                            <TapGestureRecognizer Tapped="OnSettingsClicked"/>
+                        </Border.GestureRecognizers>
                         <Grid ColumnDefinitions="*,Auto">
                             <Label Grid.Column="0" Text="Settings" TextColor="{Binding TextColor}" FontSize="16" VerticalOptions="Center"/>
-                            <Button Grid.Column="1" Text="→" BackgroundColor="Transparent" TextColor="#3b82f6" FontSize="20" Padding="0" WidthRequest="40" HeightRequest="40" Clicked="OnSettingsClicked"/>
+                            <Label Grid.Column="1" Text="→" TextColor="#3b82f6" FontSize="20" VerticalOptions="Center"/>
                         </Grid>
                     </Border>
 
-                    <!-- Logout -->
-                    <Border Padding="20,15" StrokeThickness="1" BackgroundColor="{Binding MainBgColor}">
+                    <!-- Divider -->
+                    <BoxView HeightRequest="1" BackgroundColor="Gray" Opacity="0.3"/>
 
-                        <Button Text="Logout" BackgroundColor="#ef4444" TextColor="White" Clicked="OnLogout"/>
+                    <!-- Logout -->
+                    <Border Padding="20,15" StrokeThickness="0" BackgroundColor="{Binding MainBgColor}">
+                        <Button Text="Logout" 
+                                BackgroundColor="#ef4444" 
+                                TextColor="White" 
+                                Clicked="OnLogout"
+                                CornerRadius="8"/>
                     </Border>
                 </VerticalStackLayout>
             </VerticalStackLayout>
         </Border>
-
-        <!-- Menu Backdrop (Tap to close) -->
-        <BoxView x:Name="MenuBackdrop" 
-                 Color="Black" 
-                 Opacity="0.5" 
-                 IsVisible="False" 
-                 ZIndex="99">
-            <BoxView.GestureRecognizers>
-                <TapGestureRecognizer Tapped="OnMenuBackdropTapped"/>
-            </BoxView.GestureRecognizers>
-        </BoxView>
 
     </Grid>
 </ContentPage>

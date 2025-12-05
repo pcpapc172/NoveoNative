@@ -20,6 +20,8 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
     private bool _isLoginVisible = true;
     public bool IsLoginVisible { get => _isLoginVisible; set { _isLoginVisible = value; OnPropertyChanged(); } }
 
+    private bool _isMenuOpen = false;
+
     private bool _isRegisterMode = false;
     public string LoginBtnText => _isRegisterMode ? "Register" : "Login";
     public string ToggleBtnText => _isRegisterMode ? "Already have an account? Login" : "Don't have an account? Register";
@@ -189,10 +191,8 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
 
     private async void OnSettingsClicked(object sender, EventArgs e)
     {
-        // Close menu first
-        MenuDrawer.IsVisible = false;
-        MenuBackdrop.IsVisible = false;
-
+        // Close menu with animation
+        await CloseMenu();
         await Navigation.PushAsync(new SettingsPage());
     }
 
@@ -222,24 +222,62 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
         }
     }
 
-    // HAMBURGER MENU METHODS
-    private void OnMenuClicked(object sender, EventArgs e)
+    // ✅ NEW: HAMBURGER MENU WITH SLIDING ANIMATION
+    private async void OnMenuClicked(object sender, EventArgs e)
     {
-        // Toggle menu visibility
-        bool isOpen = MenuDrawer.IsVisible;
-        MenuDrawer.IsVisible = !isOpen;
-        MenuBackdrop.IsVisible = !isOpen;
+        if (_isMenuOpen)
+        {
+            await CloseMenu();
+        }
+        else
+        {
+            await OpenMenu();
+        }
     }
 
-    private void OnMenuBackdropTapped(object sender, EventArgs e)
+    private async Task OpenMenu()
     {
-        // Close menu when backdrop is tapped
+        _isMenuOpen = true;
+
+        // Show backdrop and menu
+        MenuBackdrop.IsVisible = true;
+        MenuDrawer.IsVisible = true;
+
+        // Start menu off-screen to the left
+        MenuDrawer.TranslationX = -250;
+
+        // Animate both elements simultaneously
+        var menuTask = MenuDrawer.TranslateTo(0, 0, 250, Easing.CubicOut);
+        var backdropTask = MenuBackdrop.FadeTo(1, 250, Easing.Linear);
+
+        await Task.WhenAll(menuTask, backdropTask);
+    }
+
+    private async Task CloseMenu()
+    {
+        if (!_isMenuOpen) return;
+
+        _isMenuOpen = false;
+
+        // Animate both elements simultaneously
+        var menuTask = MenuDrawer.TranslateTo(-250, 0, 250, Easing.CubicIn);
+        var backdropTask = MenuBackdrop.FadeTo(0, 250, Easing.Linear);
+
+        await Task.WhenAll(menuTask, backdropTask);
+
+        // Hide after animation
         MenuDrawer.IsVisible = false;
         MenuBackdrop.IsVisible = false;
     }
 
-    private void OnLogout(object sender, EventArgs e)
+    private async void OnMenuBackdropTapped(object sender, EventArgs e)
     {
+        await CloseMenu();
+    }
+
+    private async void OnLogout(object sender, EventArgs e)
+    {
+        await CloseMenu();
         SettingsManager.ClearSession();
         Application.Current!.MainPage = new NavigationPage(new ChatListPage());
     }

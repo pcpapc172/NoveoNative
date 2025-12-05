@@ -3,50 +3,43 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:NoveoNative"
              x:Class="NoveoNative.MobileChatPage"
-             NavigationPage.HasNavigationBar="False"
              Shell.NavBarIsVisible="False"
-             BackgroundColor="{Binding Source={x:Reference MainChatView}, Path=BindingContext.MainBgColor}">
+             Shell.TabBarIsVisible="False">
 
     <Grid RowDefinitions="Auto,*">
-        <!-- Custom Header -->
-        <Border Grid.Row="0" BackgroundColor="{Binding Source={x:Reference MainChatView}, Path=BindingContext.HeaderBgColor}" Padding="10" StrokeThickness="0">
-            <Grid ColumnDefinitions="Auto,50,*">
-                <Button Grid.Column="0" Text="←" BackgroundColor="Transparent" 
-                        TextColor="{Binding Source={x:Reference MainChatView}, Path=BindingContext.TextColor}" FontSize="24" 
-                        Clicked="OnBackClicked" WidthRequest="40" HeightRequest="40"/>
+        <!-- Header Bar -->
+        <Border Grid.Row="0" BackgroundColor="#3b82f6" Padding="10,40,10,10" StrokeThickness="0">
+            <Grid ColumnDefinitions="50,50,*,50">
+                <!-- Back Button -->
+                <Button Grid.Column="0" Text="←" FontSize="24" TextColor="White" 
+                        BackgroundColor="Transparent" Clicked="OnBackClicked" 
+                        WidthRequest="40" HeightRequest="40"/>
 
                 <!-- Avatar -->
                 <Border Grid.Column="1" StrokeShape="RoundRectangle 20" 
                         HeightRequest="40" WidthRequest="40" 
-                        BackgroundColor="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ChatAvatarBgColor}"
-                        StrokeThickness="0" Margin="5,0">
-                    <Grid>
-                        <Label Text="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ChatAvatarLetter}" 
-                               TextColor="White" FontSize="18" FontAttributes="Bold"
-                               HorizontalOptions="Center" VerticalOptions="Center"
-                               IsVisible="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ShowAvatarLetter}"/>
-                        <Image Source="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ChatAvatarUrl}" 
-                               Aspect="AspectFill"
-                               IsVisible="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ShowAvatarImage}">
-                            <Image.Clip>
-                                <EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/>
-                            </Image.Clip>
-                        </Image>
-                    </Grid>
+                        BackgroundColor="White" StrokeThickness="0">
+                    <Label Text="{Binding ChatAvatarLetter}" TextColor="#3b82f6" 
+                           FontSize="18" FontAttributes="Bold"
+                           HorizontalOptions="Center" VerticalOptions="Center"/>
                 </Border>
 
-                <!-- Name and subtitle -->
-                <VerticalStackLayout Grid.Column="2" VerticalOptions="Center">
-                    <Label Text="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ChatName}" 
-                           TextColor="{Binding Source={x:Reference MainChatView}, Path=BindingContext.TextColor}" 
-                           FontSize="18" FontAttributes="Bold"/>
-                    <Label Text="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ChatSubtitle}" 
-                           TextColor="Gray" FontSize="12"
-                           IsVisible="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ShowSubtitle}"/>
+                <!-- Chat Info -->
+                <VerticalStackLayout Grid.Column="2" VerticalOptions="Center" Padding="10,0,0,0">
+                    <Label Text="{Binding ChatName}" FontSize="16" FontAttributes="Bold" 
+                           TextColor="White"/>
+                    <Label Text="{Binding ChatSubtitle}" FontSize="12" TextColor="White"
+                           Opacity="0.8" IsVisible="{Binding ShowSubtitle}"/>
                 </VerticalStackLayout>
+
+                <!-- Menu Button (optional) -->
+                <Button Grid.Column="3" Text="⋮" FontSize="24" TextColor="White" 
+                        BackgroundColor="Transparent" 
+                        WidthRequest="40" HeightRequest="40"/>
             </Grid>
         </Border>
 
-        <local:ChatView x:Name="MainChatView" Grid.Row="1"/>
+        <!-- Chat View -->
+        <local:ChatView x:Name="ChatViewControl" Grid.Row="1"/>
     </Grid>
 </ContentPage>
