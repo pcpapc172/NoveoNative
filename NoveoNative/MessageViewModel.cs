@@ -22,6 +22,9 @@ public class MessageViewModel : INotifyPropertyChanged
 
     public bool HasText => !string.IsNullOrEmpty(_text);
 
+    // ✅ NEW: Can edit only text messages without files/themes
+    public bool CanEdit => !IsTheme && !IsImage && !IsVideo && !IsAudio && !ShowGenericFile;
+
     // FormattedString with @mention detection
     public FormattedString MessageFormatted
     {
@@ -87,9 +90,10 @@ public class MessageViewModel : INotifyPropertyChanged
 
     public bool IsForwarded { get; set; }
     public string? ForwardedFrom { get; set; }
+    // ✅ FIXED: Show username instead of UUID (issue #7)
     public string ForwardedLabel => IsForwarded ? $"Forwarded from {ForwardedFrom}" : "";
 
-    // NEW: Seen status
+    // Seen status
     private List<string> _seenBy = new List<string>();
     public List<string> SeenBy
     {
@@ -104,7 +108,7 @@ public class MessageViewModel : INotifyPropertyChanged
         }
     }
 
-    // NEW: Checkmark display
+    // Checkmark display
     public string SeenStatus
     {
         get
@@ -113,20 +117,18 @@ public class MessageViewModel : INotifyPropertyChanged
 
             if (SeenBy != null && SeenBy.Count > 0)
             {
-                // Seen by someone - blue double check
                 return "✓✓";
             }
             else
             {
-                // Sent but not seen - grey single check
                 return "✓";
             }
         }
     }
 
     public Color SeenCheckColor => (SeenBy != null && SeenBy.Count > 0)
-    ? Color.FromArgb("#ffffff")  // ✅ White for seen (visible on blue bubble)
-    : Color.FromArgb("#b8d4ff");  // ✅ Light blue for unseen (visible on blue bubble)
+        ? Color.FromArgb("#ffffff")  // White for seen (visible on blue bubble)
+        : Color.FromArgb("#b8d4ff");  // Light blue for unseen
 
     public bool ShowSeenCheckmarks => IsOutgoing;
 
@@ -153,7 +155,7 @@ public class MessageViewModel : INotifyPropertyChanged
             AvatarUrl = client.GetUserAvatar(msg.SenderId),
             Time = DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp).ToLocalTime().ToString("HH:mm"),
             IsOutgoing = msg.SenderId == client.CurrentUserId,
-            SeenBy = msg.SeenBy ?? new List<string>()  // NEW
+            SeenBy = msg.SeenBy ?? new List<string>()
         };
 
         var parsed = client.ParseMessageContent(msg.Content);
@@ -181,10 +183,11 @@ public class MessageViewModel : INotifyPropertyChanged
             }
         }
 
+        // ✅ FIXED: Get username from userId (issue #7)
         if (parsed.IsForwarded)
         {
             vm.IsForwarded = true;
-            vm.ForwardedFrom = parsed.ForwardedFrom;
+            vm.ForwardedFrom = client.GetUserName(parsed.ForwardedFrom);
         }
 
         return vm;

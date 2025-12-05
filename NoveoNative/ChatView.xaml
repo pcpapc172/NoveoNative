@@ -27,6 +27,7 @@
                     </Border>
 
                     <Border Grid.Column="1" StrokeShape="RoundRectangle 0,15,15,15" StrokeThickness="0" BackgroundColor="{Binding BubbleColor}" HorizontalOptions="Start" MaximumWidthRequest="350" Padding="8">
+                        <!-- ✅ FIXED: Context menu for mobile -->
                         <FlyoutBase.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Reply" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxReplyCommand}" CommandParameter="{Binding .}"/>
@@ -35,7 +36,7 @@
                             </MenuFlyout>
                         </FlyoutBase.ContextFlyout>
                         <Border.GestureRecognizers>
-                            <TapGestureRecognizer Command="{Binding OpenMenuCommand}"/>
+                            <TapGestureRecognizer NumberOfTapsRequired="2" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxReplyCommand}" CommandParameter="{Binding .}"/>
                         </Border.GestureRecognizers>
 
                         <VerticalStackLayout>
@@ -87,8 +88,10 @@
             <DataTemplate x:Key="OutgoingMessageTemplate" x:DataType="local:MessageViewModel">
                 <Grid Padding="5">
                     <Border StrokeShape="RoundRectangle 15,0,15,15" StrokeThickness="0" BackgroundColor="#3b82f6" HorizontalOptions="End" MaximumWidthRequest="350" Padding="8">
+                        <!-- ✅ FIXED: Removed IsVisible - MenuFlyoutItem doesn't support it -->
                         <FlyoutBase.ContextFlyout>
                             <MenuFlyout>
+                                <MenuFlyoutItem Text="Edit" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxEditCommand}" CommandParameter="{Binding .}"/>
                                 <MenuFlyoutItem Text="Reply" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxReplyCommand}" CommandParameter="{Binding .}"/>
                                 <MenuFlyoutItem Text="Forward" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxForwardCommand}" CommandParameter="{Binding .}"/>
                                 <MenuFlyoutItem Text="Copy" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxCopyCommand}" CommandParameter="{Binding .}"/>
@@ -96,7 +99,7 @@
                             </MenuFlyout>
                         </FlyoutBase.ContextFlyout>
                         <Border.GestureRecognizers>
-                            <TapGestureRecognizer Command="{Binding OpenMenuCommand}"/>
+                            <TapGestureRecognizer NumberOfTapsRequired="2" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxEditCommand}" CommandParameter="{Binding .}"/>
                         </Border.GestureRecognizers>
 
                         <VerticalStackLayout>
@@ -138,11 +141,11 @@
                             </StackLayout>
                             <Label FormattedText="{Binding MessageFormatted}" IsVisible="{Binding HasText}" FontSize="15"/>
 
-                            <!-- NEW: Time with checkmarks -->
+                            <!-- Time with checkmarks -->
                             <StackLayout Orientation="Horizontal" HorizontalOptions="End" Spacing="3">
                                 <Label Text="{Binding Time}" TextColor="#e0e0e0" FontSize="9"/>
                                 <Label Text="{Binding SeenStatus}" TextColor="{Binding SeenCheckColor}" 
-                                       FontSize="10" FontAttributes="Bold" IsVisible="{Binding ShowSeenCheckmarks}"/>
+                           FontSize="10" FontAttributes="Bold" IsVisible="{Binding ShowSeenCheckmarks}"/>
                             </StackLayout>
                         </VerticalStackLayout>
                     </Border>
@@ -151,15 +154,21 @@
         </ResourceDictionary>
     </ContentView.Resources>
 
-    <Grid RowDefinitions="Auto,*,Auto,Auto">
+    <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
 
-        <!-- HEADER BAR -->
+        <!-- ✅ FIXED: Single unified header bar -->
         <Border Grid.Row="0" BackgroundColor="{Binding HeaderBgColor}" 
-                Padding="10" StrokeThickness="0"
+                Padding="10,40,10,10" StrokeThickness="0"
                 IsVisible="{Binding HasActiveChat}">
-            <Grid ColumnDefinitions="50,*">
+            <Grid ColumnDefinitions="Auto,50,*,50">
+                <!-- Back Button (Mobile Only) -->
+                <Button Grid.Column="0" Text="←" FontSize="24" TextColor="{Binding TextColor}" 
+                        BackgroundColor="Transparent" Clicked="OnBackClicked" 
+                        WidthRequest="40" HeightRequest="40"
+                        IsVisible="{Binding ShowMobileBackButton}"/>
+
                 <!-- Avatar -->
-                <Border Grid.Column="0" StrokeShape="RoundRectangle 20" 
+                <Border Grid.Column="1" StrokeShape="RoundRectangle 20" 
                         HeightRequest="40" WidthRequest="40" 
                         BackgroundColor="{Binding ChatAvatarBgColor}"
                         StrokeThickness="0">
@@ -178,12 +187,19 @@
                 </Border>
 
                 <!-- Info -->
-                <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Padding="10,0,0,0">
+                <VerticalStackLayout Grid.Column="2" VerticalOptions="Center" Padding="10,0,0,0">
                     <Label Text="{Binding ChatName}" FontSize="16" FontAttributes="Bold" 
                            TextColor="{Binding TextColor}"/>
-                    <Label Text="{Binding ChatSubtitle}" FontSize="12" TextColor="Gray"
-                           IsVisible="{Binding ShowSubtitle}"/>
+                    <!-- ✅ FIXED: Typing replaces subtitle -->
+                    <Label Text="{Binding DisplaySubtitle}" FontSize="12" 
+                           TextColor="{Binding SubtitleColor}"
+                           FontAttributes="{Binding SubtitleFontAttributes}"/>
                 </VerticalStackLayout>
+
+                <!-- Menu Button -->
+                <Button Grid.Column="3" Text="⋮" FontSize="24" TextColor="{Binding TextColor}" 
+                        BackgroundColor="Transparent" 
+                        WidthRequest="40" HeightRequest="40"/>
             </Grid>
         </Border>
 
@@ -192,14 +208,6 @@
             <ActivityIndicator IsRunning="{Binding IsLoading}" IsVisible="{Binding IsLoading}" 
                                VerticalOptions="Center" HorizontalOptions="Center" 
                                Color="#3b82f6" HeightRequest="50" WidthRequest="50" ZIndex="5"/>
-
-            <!-- NEW: Typing Indicator -->
-            <Label x:Name="TypingIndicator" 
-                   Text="{Binding TypingStatus}" 
-                   TextColor="Gray" FontSize="12" FontAttributes="Italic"
-                   Padding="15,5" VerticalOptions="Start" HorizontalOptions="Start"
-                   IsVisible="{Binding ShowTypingIndicator}"
-                   ZIndex="4"/>
 
             <CollectionView x:Name="MessagesList" Margin="0,0,0,5">
                 <CollectionView.ItemTemplate>
@@ -210,8 +218,18 @@
             </CollectionView>
         </Grid>
 
+        <!-- ✅ FIXED: Edit Mode Bar (NEW) -->
+        <Grid Grid.Row="2" BackgroundColor="#f59e0b" Padding="10" IsVisible="{Binding IsEditing}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition Width="30"/>
+            </Grid.ColumnDefinitions>
+            <Label Text="{Binding EditText}" TextColor="White" FontSize="12" FontAttributes="Bold" VerticalOptions="Center"/>
+            <Button Grid.Column="1" Text="✕" BackgroundColor="Transparent" TextColor="White" Clicked="OnCancelEdit" Padding="0"/>
+        </Grid>
+
         <!-- Preview Bar -->
-        <Grid Grid.Row="2" BackgroundColor="#e0e0e0" Padding="10" IsVisible="{Binding IsPreviewActive}">
+        <Grid Grid.Row="3" BackgroundColor="#e0e0e0" Padding="10" IsVisible="{Binding IsPreviewActive}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="30"/>
@@ -229,7 +247,7 @@
         </Grid>
 
         <!-- Input Bar -->
-        <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" Padding="10" 
+        <Grid Grid.Row="4" ColumnDefinitions="Auto,*,Auto" Padding="10" 
               BackgroundColor="{Binding InputBgColor}" IsVisible="{Binding CanSend}">
             <Button Grid.Column="0" Text="📎" BackgroundColor="Transparent" TextColor="#3b82f6" 
                     FontSize="22" Padding="0" Margin="0" Clicked="OnAttachClicked" 
@@ -244,7 +262,7 @@
                     WidthRequest="50" HeightRequest="50" CornerRadius="25" Clicked="OnSendClicked"/>
         </Grid>
 
-        <Label Grid.Row="3" Text="You cannot send messages in this channel." TextColor="Gray" 
+        <Label Grid.Row="4" Text="You cannot send messages in this channel." TextColor="Gray" 
                HorizontalOptions="Center" VerticalOptions="Center" 
                IsVisible="{Binding IsReadOnlyChannel}" Padding="15"/>
     </Grid>

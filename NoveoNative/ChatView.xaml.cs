@@ -24,9 +24,33 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
     public string ChatName { get => _chatName; set { _chatName = value; OnPropertyChanged(); } }
 
     private string _chatSubtitle = "";
-    public string ChatSubtitle { get => _chatSubtitle; set { _chatSubtitle = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowSubtitle)); } }
+    public string ChatSubtitle { get => _chatSubtitle; set { _chatSubtitle = value; OnPropertyChanged(); OnPropertyChanged(nameof(DisplaySubtitle)); OnPropertyChanged(nameof(SubtitleColor)); OnPropertyChanged(nameof(SubtitleFontAttributes)); } }
 
-    public bool ShowSubtitle => !string.IsNullOrEmpty(_chatSubtitle);
+    // ✅ FIXED: Typing indicator replaces subtitle (issue #2)
+    private string _typingStatus = "";
+    public string TypingStatus
+    {
+        get => _typingStatus;
+        set
+        {
+            _typingStatus = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(DisplaySubtitle));
+            OnPropertyChanged(nameof(SubtitleColor));
+            OnPropertyChanged(nameof(SubtitleFontAttributes));
+        }
+    }
+
+    // Display typing if available, otherwise subtitle
+    public string DisplaySubtitle => !string.IsNullOrEmpty(_typingStatus) ? _typingStatus : _chatSubtitle;
+    public Color SubtitleColor => !string.IsNullOrEmpty(_typingStatus) ? Color.FromArgb("#22c55e") : Colors.Gray;
+    public FontAttributes SubtitleFontAttributes => !string.IsNullOrEmpty(_typingStatus) ? FontAttributes.Italic : FontAttributes.None;
+
+    private HashSet<string> _currentlyTyping = new HashSet<string>();
+
+    // Mobile back button
+    private bool _showMobileBackButton = false;
+    public bool ShowMobileBackButton { get => _showMobileBackButton; set { _showMobileBackButton = value; OnPropertyChanged(); } }
 
     private string _chatAvatarUrl = "";
     public string ChatAvatarUrl { get => _chatAvatarUrl; set { _chatAvatarUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowAvatarImage)); OnPropertyChanged(nameof(ShowAvatarLetter)); } }
@@ -38,12 +62,6 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
     public bool ShowAvatarLetter => string.IsNullOrEmpty(_chatAvatarUrl);
     public bool ShowAvatarImage => !string.IsNullOrEmpty(_chatAvatarUrl);
     public Color HeaderBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#1f2937") : Color.FromArgb("#f0f0f0");
-
-    // NEW: Typing Indicator
-    private string _typingStatus = "";
-    public string TypingStatus { get => _typingStatus; set { _typingStatus = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowTypingIndicator)); } }
-    public bool ShowTypingIndicator => !string.IsNullOrEmpty(_typingStatus);
-    private HashSet<string> _currentlyTyping = new HashSet<string>();
 
     // Other properties
     private bool _isReadOnlyChannel = false;
@@ -62,10 +80,18 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
     private MessageViewModel? _forwardMessage;
     private FileResult? _attachedFile;
 
+    // ✅ NEW: Edit mode (issue #5)
+    private MessageViewModel? _editingMessage;
+
     public bool IsPreviewActive => _replyToMessage != null || _forwardMessage != null || _attachedFile != null || _uploadProgress > 0;
     public bool IsReplying => _replyToMessage != null;
     public bool IsForwarding => _forwardMessage != null;
     public bool IsFileAttached => _attachedFile != null;
+
+    // ✅ NEW: Edit mode
+    public bool IsEditing => _editingMessage != null;
+    public string EditText => _editingMessage != null ? $"Edit message: {_editingMessage.Text}" : "";
+
     public string ReplyText => _replyToMessage != null ? $"Replying to {_replyToMessage.SenderName}: {_replyToMessage.Text}" : "";
     public string ForwardText => _forwardMessage != null ? $"Forwarding message from {_forwardMessage.SenderName}" : "";
     public string AttachedFileName => _attachedFile?.FileName ?? "";
@@ -78,6 +104,7 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
     public ICommand CtxForwardCommand { get; }
     public ICommand CtxCopyCommand { get; }
     public ICommand CtxDeleteCommand { get; }
+    public ICommand CtxEditCommand { get; } // ✅ NEW
     public ICommand SendCommand { get; }
 
     public ChatView()
@@ -90,6 +117,7 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
         CtxForwardCommand = new Command<MessageViewModel>((msg) => OnForward(msg));
         CtxCopyCommand = new Command<MessageViewModel>((msg) => OnCopy(msg));
         CtxDeleteCommand = new Command<MessageViewModel>((msg) => OnDelete(msg));
+        CtxEditCommand = new Command<MessageViewModel>((msg) => OnEdit(msg)); // ✅ NEW
         SendCommand = new Command(() => OnSendClicked(null, EventArgs.Empty));
 
         ChatListPage.Client.OnMessageReceived += (msg) => MainThread.BeginInvokeOnMainThread(() =>
@@ -99,7 +127,7 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
                 var vm = MessageViewModel.FromServerMessage(msg, ChatListPage.Client);
                 Messages.Add(vm);
 
-                // NEW: Auto-mark as seen if chat is open
+                // Auto-mark as seen if chat is open
                 if (msg.SenderId != ChatListPage.Client.CurrentUserId)
                 {
                     ChatListPage.Client.MarkMessageAsSeen(msg.ChatId ?? "", msg.MessageId ?? "");
@@ -117,7 +145,7 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
             }
         });
 
-        // NEW: Typing indicator
+        // Typing indicator
         ChatListPage.Client.OnUserTyping += (chatId, userId) => MainThread.BeginInvokeOnMainThread(() =>
         {
             if (chatId != _currentChatId || userId == ChatListPage.Client.CurrentUserId) return;
@@ -147,7 +175,7 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
             _typingTimers[userId] = timer;
         });
 
-        // NEW: Seen status update
+        // ✅ FIXED: Seen status update with property refresh (issue #3)
         ChatListPage.Client.OnMessageSeen += (chatId, messageId, userId) => MainThread.BeginInvokeOnMainThread(() =>
         {
             if (chatId != _currentChatId) return;
@@ -157,13 +185,14 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
             {
                 if (!msg.SeenBy.Contains(userId))
                 {
-                    msg.SeenBy.Add(userId);
-                    msg.OnPropertyChanged(nameof(msg.SeenBy));
+                    // Create new list to trigger property setter
+                    var newSeenBy = new List<string>(msg.SeenBy) { userId };
+                    msg.SeenBy = newSeenBy;
                 }
             }
         });
 
-        // NEW: Send typing indicator when user types (throttled)
+        // Send typing indicator when user types (throttled)
         var typingTimer = new System.Timers.Timer(1000);
         bool hasTyped = false;
 
@@ -290,7 +319,7 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
                     var vm = MessageViewModel.FromServerMessage(msg, ChatListPage.Client);
                     Messages.Add(vm);
 
-                    // NEW: Mark unseen messages as seen
+                    // Mark unseen messages as seen
                     if (msg.SenderId != ChatListPage.Client.CurrentUserId &&
                         (msg.SeenBy == null || !msg.SeenBy.Contains(ChatListPage.Client.CurrentUserId)))
                     {
@@ -349,6 +378,21 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
         string text = MsgEntry.Text?.Trim() ?? "";
         object? fileObj = null;
 
+        // ✅ FIXED: Handle edit mode (issue #5)
+        if (_editingMessage != null)
+        {
+            if (!string.IsNullOrEmpty(text))
+            {
+                await ChatListPage.Client.EditMessage(_currentChatId, _editingMessage.MessageId, text);
+            }
+
+            MsgEntry.Text = "";
+            _editingMessage = null;
+            OnPropertyChanged(nameof(IsEditing));
+            OnPropertyChanged(nameof(EditText));
+            return;
+        }
+
         if (_attachedFile != null)
         {
             UploadProgress = 0.1;
@@ -397,6 +441,15 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
         OnPropertyChanged(nameof(IsFileAttached));
     }
 
+    // ✅ NEW: Cancel edit mode (issue #5)
+    private void OnCancelEdit(object sender, EventArgs e)
+    {
+        _editingMessage = null;
+        MsgEntry.Text = "";
+        OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(EditText));
+    }
+
     private void OnReply(MessageViewModel msg)
     {
         _replyToMessage = msg;
@@ -408,14 +461,56 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
         MsgEntry.Focus();
     }
 
-    private void OnForward(MessageViewModel msg)
+    // ✅ FIXED: Forward with dialog (issue #6)
+    private async void OnForward(MessageViewModel msg)
     {
-        _forwardMessage = msg;
+        // Show action sheet to select chat
+        var chats = ChatListPage.Client.AllChats.Select(c =>
+        {
+            if (c.ChatType == "private" && c.Members != null)
+            {
+                var otherId = c.Members.FirstOrDefault(m => m != ChatListPage.Client.CurrentUserId);
+                return ChatListPage.Client.GetUserName(otherId);
+            }
+            return c.ChatName ?? "Unknown";
+        }).ToArray();
+
+        if (chats.Length == 0)
+        {
+            await Application.Current!.MainPage!.DisplayAlert("Forward", "No chats available", "OK");
+            return;
+        }
+
+        var action = await Application.Current!.MainPage!.DisplayActionSheet(
+            "Forward message to...",
+            "Cancel",
+            null,
+            chats);
+
+        if (action != null && action != "Cancel")
+        {
+            var selectedChat = ChatListPage.Client.AllChats[Array.IndexOf(chats, action)];
+
+            object forwardInfo = new { from = msg.SenderId, messageId = msg.MessageId };
+            await ChatListPage.Client.SendMessage(selectedChat.ChatId, msg.Text, null, null, forwardInfo, null);
+
+            await Application.Current!.MainPage!.DisplayAlert("Forwarded", $"Message forwarded to {action}", "OK");
+        }
+    }
+
+    // ✅ NEW: Edit message (issue #5)
+    private void OnEdit(MessageViewModel msg)
+    {
+        _editingMessage = msg;
         _replyToMessage = null;
+        _forwardMessage = null;
+        MsgEntry.Text = msg.Text;
+        OnPropertyChanged(nameof(IsEditing));
+        OnPropertyChanged(nameof(EditText));
         OnPropertyChanged(nameof(IsPreviewActive));
         OnPropertyChanged(nameof(IsReplying));
         OnPropertyChanged(nameof(IsForwarding));
-        OnPropertyChanged(nameof(ForwardText));
+        MsgEntry.Focus();
     }
 
     private async void OnCopy(MessageViewModel msg)
@@ -433,6 +528,11 @@ public partial class ChatView : ContentView, INotifyPropertyChanged
         {
             await ChatListPage.Client.DeleteMessage(_currentChatId, msg.MessageId);
         }
+    }
+
+    private async void OnBackClicked(object sender, EventArgs e)
+    {
+        await Application.Current?.MainPage?.Navigation.PopAsync();
     }
 
     private void ScrollToBottom()

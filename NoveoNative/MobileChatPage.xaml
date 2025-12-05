@@ -4,42 +4,8 @@
              xmlns:local="clr-namespace:NoveoNative"
              x:Class="NoveoNative.MobileChatPage"
              Shell.NavBarIsVisible="False"
-             Shell.TabBarIsVisible="False">
+             Shell.TabBarIsVisible="False"
+             NavigationPage.HasNavigationBar="False">
 
-    <Grid RowDefinitions="Auto,*">
-        <!-- Header Bar -->
-        <Border Grid.Row="0" BackgroundColor="#3b82f6" Padding="10,40,10,10" StrokeThickness="0">
-            <Grid ColumnDefinitions="50,50,*,50">
-                <!-- Back Button -->
-                <Button Grid.Column="0" Text="←" FontSize="24" TextColor="White" 
-                        BackgroundColor="Transparent" Clicked="OnBackClicked" 
-                        WidthRequest="40" HeightRequest="40"/>
-
-                <!-- Avatar -->
-                <Border Grid.Column="1" StrokeShape="RoundRectangle 20" 
-                        HeightRequest="40" WidthRequest="40" 
-                        BackgroundColor="White" StrokeThickness="0">
-                    <Label Text="{Binding ChatAvatarLetter}" TextColor="#3b82f6" 
-                           FontSize="18" FontAttributes="Bold"
-                           HorizontalOptions="Center" VerticalOptions="Center"/>
-                </Border>
-
-                <!-- Chat Info -->
-                <VerticalStackLayout Grid.Column="2" VerticalOptions="Center" Padding="10,0,0,0">
-                    <Label Text="{Binding ChatName}" FontSize="16" FontAttributes="Bold" 
-                           TextColor="White"/>
-                    <Label Text="{Binding ChatSubtitle}" FontSize="12" TextColor="White"
-                           Opacity="0.8" IsVisible="{Binding ShowSubtitle}"/>
-                </VerticalStackLayout>
-
-                <!-- Menu Button (optional) -->
-                <Button Grid.Column="3" Text="⋮" FontSize="24" TextColor="White" 
-                        BackgroundColor="Transparent" 
-                        WidthRequest="40" HeightRequest="40"/>
-            </Grid>
-        </Border>
-
-        <!-- Chat View -->
-        <local:ChatView x:Name="ChatViewControl" Grid.Row="1"/>
-    </Grid>
+    <local:ChatView x:Name="ChatViewControl"/>
 </ContentPage>

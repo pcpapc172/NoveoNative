@@ -6,23 +6,17 @@ public partial class MobileChatPage : ContentPage
     {
         InitializeComponent();
 
-        // Bind header to ChatView properties
-        BindingContext = ChatViewControl;
-
         // Load chat
         ChatViewControl.LoadChat(chatId, recipientId);
-    }
 
-    private async void OnBackClicked(object sender, EventArgs e)
-    {
-        await Navigation.PopAsync();
+        // Enable back button in ChatView
+        ChatViewControl.ShowMobileBackButton = true;
     }
 
     protected override void OnAppearing()
     {
         base.OnAppearing();
 
-        // Set status bar color for iOS
 #if IOS
         Microsoft.Maui.Controls.PlatformConfiguration.iOSSpecific.Page.SetUseSafeArea(this, true);
 #endif

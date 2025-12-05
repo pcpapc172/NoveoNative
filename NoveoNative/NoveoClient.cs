@@ -171,6 +171,17 @@ namespace NoveoNative
             await SendRaw(JsonSerializer.Serialize(msg));
         }
 
+        public async Task EditMessage(string chatId, string messageId, string newText)
+        {
+            await SendRaw(JsonSerializer.Serialize(new
+            {
+                type = "edit_message",
+                chatId,
+                messageId,
+                newContent = newText
+            }));
+        }
+
         public async Task DeleteMessage(string chatId, string messageId) { await SendRaw(JsonSerializer.Serialize(new { type = "delete_message", chatId, messageId })); }
         public async Task UpdateUsername(string newName) { await SendRaw(JsonSerializer.Serialize(new { type = "update_username", username = newName })); CurrentUsername = newName; }
         public async Task GetChannelByHandle(string handle) { await SendRaw(JsonSerializer.Serialize(new { type = "get_channel_by_handle", handle })); }
