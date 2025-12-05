@@ -13,7 +13,6 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
     public GridLength ChatColumnWidth => IsDesktop ? GridLength.Star : new GridLength(0);
     public Color MainBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#111827") : Colors.White;
     public Color TextColor => SettingsManager.IsDarkMode ? Colors.White : Colors.Black;
-    public Color BorderColor => SettingsManager.IsDarkMode ? Color.FromArgb("#374151") : Color.FromArgb("#e5e7eb");
 
     private bool _isListEmpty = true;
     public bool IsListEmpty { get => _isListEmpty; set { _isListEmpty = value; OnPropertyChanged(); } }
@@ -25,12 +24,12 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
     public string LoginBtnText => _isRegisterMode ? "Register" : "Login";
     public string ToggleBtnText => _isRegisterMode ? "Already have an account? Login" : "Don't have an account? Register";
 
-    private bool _isMenuOpen = false;
-
     public ChatListPage()
     {
         InitializeComponent();
         BindingContext = this;
+
+        // LOAD SAVED DARK MODE
         MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
 
         var session = SettingsManager.GetSession();
@@ -46,6 +45,15 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
         Client.OnChannelInfo += (chat) => LoadChats();
 
         if (!IsLoginVisible) CheckAutoLogin();
+
+        // FIX: Refresh colors on startup for desktop
+        Loaded += (s, e) =>
+        {
+            if (IsDesktop)
+            {
+                DesktopChatView.RefreshColors();
+            }
+        };
     }
 
     private async void CheckAutoLogin()
@@ -62,7 +70,6 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
             var newItems = new List<ChatViewModel>();
             var existingChatIds = new HashSet<string>();
 
-            // 1. Add Active Chats (History exists)
             foreach (var c in Client.AllChats)
             {
                 string name = c.ChatName ?? "";
@@ -109,7 +116,6 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
                 });
             }
 
-            // 2. Add Missing Users (DMs with no history)
             foreach (var user in Client.Users.Values)
             {
                 if (user.UserId == Client.CurrentUserId) continue;
@@ -135,11 +141,12 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
             }
 
             var sorted = newItems.OrderByDescending(x => x.LastMessagePreview != "Online" && x.LastMessagePreview != "Offline")
-                                 .ThenByDescending(x => x.IsOnline)
-                                 .ToList();
+                .ThenByDescending(x => x.IsOnline)
+                .ToList();
 
             Chats.Clear();
             foreach (var item in sorted) Chats.Add(item);
+
             if (Chats.Count == 0) IsListEmpty = true;
         });
     }
@@ -162,77 +169,36 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
     private void OnToggleTheme(object sender, EventArgs e)
     {
         SettingsManager.IsDarkMode = !SettingsManager.IsDarkMode;
-
-        // Set app-wide theme
-        if (SettingsManager.IsDarkMode)
-            Application.Current!.UserAppTheme = AppTheme.Dark;
-        else
-            Application.Current!.UserAppTheme = AppTheme.Light;
-
+        SettingsManager.SaveDarkMode(SettingsManager.IsDarkMode);
         MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
+
+        if (SettingsManager.IsDarkMode)
+        {
+            Application.Current!.UserAppTheme = AppTheme.Dark;
+        }
+        else
+        {
+            Application.Current!.UserAppTheme = AppTheme.Light;
+        }
+
         OnPropertyChanged(nameof(MainBgColor));
         OnPropertyChanged(nameof(TextColor));
-        OnPropertyChanged(nameof(BorderColor));
-
         foreach (var chat in Chats) chat.RefreshColor();
         if (IsDesktop) DesktopChatView.RefreshColors();
-
-        // Close menu after toggling
-        if (_isMenuOpen)
-        {
-            _isMenuOpen = false;
-            MenuBackdrop.IsVisible = false;
-            MenuDrawer.IsVisible = false;
-        }
-    }
-
-    private async void OnMenuClicked(object sender, EventArgs e)
-    {
-        _isMenuOpen = !_isMenuOpen;
-
-        if (_isMenuOpen)
-        {
-            MenuBackdrop.IsVisible = true;
-            MenuDrawer.IsVisible = true;
-            MenuDrawer.TranslationX = 0;
-            await MenuDrawer.TranslateTo(0, 0, 300, Easing.CubicOut);
-        }
-        else
-        {
-            await MenuDrawer.TranslateTo(-250, 0, 300, Easing.CubicOut);
-            MenuBackdrop.IsVisible = false;
-            MenuDrawer.IsVisible = false;
-        }
-    }
-
-    private async void OnMenuBackdropTapped(object sender, TappedEventArgs e)
-    {
-        if (_isMenuOpen)
-        {
-            _isMenuOpen = false;
-            await MenuDrawer.TranslateTo(-250, 0, 300, Easing.CubicOut);
-            MenuBackdrop.IsVisible = false;
-            MenuDrawer.IsVisible = false;
-        }
     }
 
     private async void OnSettingsClicked(object sender, EventArgs e)
     {
-        // Close menu
-        if (_isMenuOpen)
-        {
-            _isMenuOpen = false;
-            await MenuDrawer.TranslateTo(-250, 0, 300, Easing.CubicOut);
-            MenuBackdrop.IsVisible = false;
-            MenuDrawer.IsVisible = false;
-        }
+        // Close menu first
+        MenuDrawer.IsVisible = false;
+        MenuBackdrop.IsVisible = false;
 
-        await Navigation.PushModalAsync(new SettingsPage());
+        await Navigation.PushAsync(new SettingsPage());
     }
 
     private void OnCreateChannel(object sender, EventArgs e)
     {
-        Navigation.PushModalAsync(new CreateChannelPage());
+        Navigation.PushAsync(new CreateChannelPage());
     }
 
     private async void OnChatSelected(object sender, SelectionChangedEventArgs e)
@@ -241,23 +207,45 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
         {
             string recipientId = selectedChat.IsPrivate ? selectedChat.OtherUserId : null;
 
-            if (IsDesktop) DesktopChatView.LoadChat(selectedChat.ChatId, recipientId);
-            else await Navigation.PushModalAsync(new MobileChatPage(selectedChat.ChatId, selectedChat.DisplayName, recipientId));
+            System.Diagnostics.Debug.WriteLine($"Opening chat: {selectedChat.ChatId}, Recipient: {recipientId}, Name: {selectedChat.DisplayName}");
+
+            if (IsDesktop)
+            {
+                DesktopChatView.LoadChat(selectedChat.ChatId, recipientId);
+            }
+            else
+            {
+                await Navigation.PushAsync(new MobileChatPage(selectedChat.ChatId, selectedChat.DisplayName, recipientId));
+            }
 
             ChatListCollectionView.SelectedItem = null;
         }
     }
 
-    private async void OnLogout(object sender, EventArgs e)
+    // HAMBURGER MENU METHODS
+    private void OnMenuClicked(object sender, EventArgs e)
     {
-        bool confirm = await DisplayAlert("Logout", "Are you sure you want to logout?", "Yes", "No");
-        if (confirm)
-        {
-            SettingsManager.ClearSession();
-            Application.Current!.MainPage = new ChatListPage();
-        }
+        // Toggle menu visibility
+        bool isOpen = MenuDrawer.IsVisible;
+        MenuDrawer.IsVisible = !isOpen;
+        MenuBackdrop.IsVisible = !isOpen;
     }
 
-    public new event PropertyChangedEventHandler? PropertyChanged;
-    protected new void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+    private void OnMenuBackdropTapped(object sender, EventArgs e)
+    {
+        // Close menu when backdrop is tapped
+        MenuDrawer.IsVisible = false;
+        MenuBackdrop.IsVisible = false;
+    }
+
+    private void OnLogout(object sender, EventArgs e)
+    {
+        SettingsManager.ClearSession();
+        Application.Current!.MainPage = new NavigationPage(new ChatListPage());
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+
+    protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

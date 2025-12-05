@@ -18,8 +18,8 @@
 		<ApplicationId>com.companyname.noveonative</ApplicationId>
 
 		<!-- Versions -->
-		<ApplicationDisplayVersion>1.0</ApplicationDisplayVersion>
-		<ApplicationVersion>1</ApplicationVersion>
+		<ApplicationDisplayVersion>1.1.3</ApplicationDisplayVersion>
+		<ApplicationVersion>5</ApplicationVersion>
 
 		<!-- Unpackaged Build for Windows .exe -->
 		<WindowsPackageType>None</WindowsPackageType>
@@ -76,6 +76,9 @@
 	</ItemGroup>
 
 	<ItemGroup>
+	  <MauiXaml Update="ChannelPreviewPage.xaml">
+	    <Generator>MSBuild:Compile</Generator>
+	  </MauiXaml>
 	  <MauiXaml Update="CreateChannelPage.xaml">
 	    <Generator>MSBuild:Compile</Generator>
 	  </MauiXaml>

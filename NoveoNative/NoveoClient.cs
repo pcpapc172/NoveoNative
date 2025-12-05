@@ -28,10 +28,13 @@ namespace NoveoNative
         [JsonPropertyName("message")] public string? ErrorMessage { get; set; }
         [JsonPropertyName("publicChatId")] public string? PublicChatId { get; set; }
 
+        // NEW: Seen status
+        [JsonPropertyName("seenBy")] public List<string>? SeenBy { get; set; }
+
         // Pinned
         [JsonPropertyName("pinnedMessage")] public object? PinnedMessage { get; set; }
 
-        // Presence info often comes in the user list or separate event
+        // Presence info
         [JsonPropertyName("userId")] public string? UserId { get; set; }
         [JsonPropertyName("online")] public object? OnlineData { get; set; }
         [JsonPropertyName("members")] public List<string>? Members { get; set; }
@@ -98,7 +101,7 @@ namespace NoveoNative
         public string CurrentUserId { get; private set; } = "";
         public string CurrentUsername { get; private set; } = "";
         public string CurrentUserAvatar { get; private set; } = "";
-        public string PublicChatId { get; private set; } = ""; // FIX ERROR
+        public string PublicChatId { get; private set; } = "";
         private string _authToken = "";
 
         // Events
@@ -110,11 +113,13 @@ namespace NoveoNative
         public event Action<string, string>? OnMessageDeleted;
         public event Action<string, object?>? OnMessageUpdated;
         public event Action<double>? OnUploadProgress;
-
-        // MISSING EVENTS FIXED
         public event Action<Chat>? OnNewChat;
         public event Action<Chat>? OnChannelInfo;
         public event Action<string, bool>? OnPresenceUpdate;
+
+        // NEW: Typing and Seen events
+        public event Action<string, string>? OnUserTyping;  // chatId, userId
+        public event Action<string, string, string>? OnMessageSeen;  // chatId, messageId, userId
 
         // --- AUTH ---
         public async Task ConnectAndLogin(string username, string password)
@@ -145,7 +150,6 @@ namespace NoveoNative
         }
 
         // --- MESSAGING & API ---
-        // --- UPDATED: Accepts recipientId for new DMs ---
         public async Task SendMessage(string chatId, string text, object? fileObj = null, string? replyToId = null, object? forwardedInfo = null, string? recipientId = null)
         {
             var contentData = new Dictionary<string, object?>();
@@ -154,7 +158,6 @@ namespace NoveoNative
             contentData["theme"] = null;
             if (forwardedInfo != null) contentData["forwardedInfo"] = forwardedInfo;
 
-            // Construct message payload
             var msg = new Dictionary<string, object>
             {
                 { "type", "message" },
@@ -163,22 +166,30 @@ namespace NoveoNative
             };
 
             if (replyToId != null) msg["replyToId"] = replyToId;
-
-            // Crucial fix for new DMs: Pass recipientId if we have it
             if (recipientId != null) msg["recipientId"] = recipientId;
 
             await SendRaw(JsonSerializer.Serialize(msg));
         }
+
         public async Task DeleteMessage(string chatId, string messageId) { await SendRaw(JsonSerializer.Serialize(new { type = "delete_message", chatId, messageId })); }
         public async Task UpdateUsername(string newName) { await SendRaw(JsonSerializer.Serialize(new { type = "update_username", username = newName })); CurrentUsername = newName; }
         public async Task GetChannelByHandle(string handle) { await SendRaw(JsonSerializer.Serialize(new { type = "get_channel_by_handle", handle })); }
-
-        // FIX MISSING METHODS
         public async Task PinMessage(string chatId, string messageId) { await SendRaw(JsonSerializer.Serialize(new { type = "pin_message", chatId, messageId })); }
         public async Task UnpinMessage(string chatId) { await SendRaw(JsonSerializer.Serialize(new { type = "unpin_message", chatId })); }
         public async Task JoinChannel(string chatId) { await SendRaw(JsonSerializer.Serialize(new { type = "join_channel", chatId })); }
 
-        // FIX MISSING CreateChannel
+        // NEW: Send typing indicator
+        public async Task SendTyping(string chatId)
+        {
+            await SendRaw(JsonSerializer.Serialize(new { type = "typing", chatId }));
+        }
+
+        // NEW: Mark message as seen
+        public async Task MarkMessageAsSeen(string chatId, string messageId)
+        {
+            await SendRaw(JsonSerializer.Serialize(new { type = "message_seen", chatId, messageId }));
+        }
+
         public async Task CreateChannel(string name, string handle, FileResult? avatar = null)
         {
             try
@@ -313,7 +324,6 @@ namespace NoveoNative
                     case "user_list_update":
                         if (data.Users != null)
                         {
-                            // FIX: Parse online status
                             List<string> onlineIds = new List<string>();
                             try
                             {
@@ -381,13 +391,22 @@ namespace NoveoNative
                         OnMessageUpdated?.Invoke(data.MessageId ?? "", data.NewContent);
                         break;
                     case "presence_update":
-                        // Simple presence update check
                         bool isOnline = json.Contains("\"online\":true");
                         if (!string.IsNullOrEmpty(data.UserId))
                         {
                             if (Users.ContainsKey(data.UserId)) Users[data.UserId].IsOnline = isOnline;
                             OnPresenceUpdate?.Invoke(data.UserId, isOnline);
                         }
+                        break;
+
+                    // NEW: Typing indicator
+                    case "typing":
+                        OnUserTyping?.Invoke(data.ChatId ?? "", data.SenderId ?? "");
+                        break;
+
+                    // NEW: Seen status update
+                    case "message_seen_update":
+                        OnMessageSeen?.Invoke(data.ChatId ?? "", data.MessageId ?? "", data.UserId ?? "");
                         break;
                 }
             }

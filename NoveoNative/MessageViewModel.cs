@@ -1,156 +1,241 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using System.Text.RegularExpressions;
 using System.Windows.Input;
 
-namespace NoveoNative
+namespace NoveoNative;
+
+public class MessageViewModel : INotifyPropertyChanged
 {
-    public class MessageViewModel : INotifyPropertyChanged
+    public static bool IsDarkMode = false;
+
+    public string MessageId { get; set; } = "";
+    public string SenderId { get; set; } = "";
+    public string SenderName { get; set; } = "";
+    public string AvatarUrl { get; set; } = "";
+    public bool HasAvatar => !string.IsNullOrEmpty(AvatarUrl);
+    public bool HasNoAvatar => string.IsNullOrEmpty(AvatarUrl);
+    public string SenderLetter => string.IsNullOrEmpty(SenderName) ? "?" : SenderName.Substring(0, 1).ToUpper();
+    public Color AvatarBgColor => Color.FromArgb("#3b82f6");
+
+    private string _text = "";
+    public string Text { get => _text; set { _text = value; OnPropertyChanged(); OnPropertyChanged(nameof(HasText)); OnPropertyChanged(nameof(MessageFormatted)); } }
+
+    public bool HasText => !string.IsNullOrEmpty(_text);
+
+    // FormattedString with @mention detection
+    public FormattedString MessageFormatted
     {
-        public static bool IsDarkMode { get; set; } = false;
-
-        public string MessageId { get; set; } = "";
-        public string SenderId { get; set; } = "";
-        public string SenderName { get; set; } = "";
-        public string SenderLetter { get; set; } = "";
-
-        public string AvatarUrl { get; set; } = "";
-        public bool HasAvatar { get; set; }
-        public bool HasNoAvatar { get; set; }
-
-        // --- NEW: Dynamic Avatar Color for Bubbles ---
-        public Color AvatarBgColor
+        get
         {
-            get
+            var formatted = new FormattedString();
+            if (string.IsNullOrEmpty(_text)) return formatted;
+
+            var words = _text.Split(' ');
+            foreach (var word in words)
             {
-                if (string.IsNullOrEmpty(SenderName)) return Colors.Gray;
-                int hash = Math.Abs(SenderName.GetHashCode());
-                string[] colors = new[] { "#ef4444", "#f97316", "#eab308", "#84cc16", "#22c55e", "#14b8a6", "#06b6d4", "#3b82f6", "#8b5cf6", "#d946ef", "#ec4899" };
-                return Color.FromArgb(colors[hash % colors.Length]);
-            }
-        }
-        // ---------------------------------------------
-
-        public string Text { get; set; } = "";
-        public bool HasText { get; set; }
-
-        private FormattedString _messageFormatted = new FormattedString();
-        public FormattedString MessageFormatted
-        {
-            get => _messageFormatted;
-            set { _messageFormatted = value; OnPropertyChanged(); }
-        }
-
-        public string Time { get; set; } = "";
-        public bool IsMine { get; set; }
-
-        // Forwarding / Reply
-        public bool IsForwarded { get; set; }
-        public string ForwardedFrom { get; set; } = "";
-        public string ForwardedLabel => $"↪ Forwarded from {ForwardedFrom}";
-
-        public bool IsReply { get; set; }
-        public string ReplyToName { get; set; } = "";
-        public string ReplyToText { get; set; } = "";
-
-        // Media
-        public bool IsTheme { get; set; }
-        public string ThemeName { get; set; } = "";
-        public bool IsFile { get; set; }
-        public bool IsImage { get; set; }
-        public bool IsVideo { get; set; }
-        public bool IsAudio { get; set; }
-        public string FileName { get; set; } = "";
-        public string FileUrl { get; set; } = "";
-        public bool ShowGenericFile => IsFile && !IsImage && !IsVideo && !IsAudio;
-
-        // Colors
-        public Color BubbleColor => IsMine ? Color.FromArgb("#3b82f6") : (IsDarkMode ? Color.FromArgb("#1f2937") : Colors.White);
-        public Color TextColor => IsMine ? Colors.White : (IsDarkMode ? Colors.White : Colors.Black);
-        public Color SenderColor => IsDarkMode ? Color.FromArgb("#60a5fa") : Colors.Orange;
-        public Color ReplyQuoteColor => IsMine ? Color.FromArgb("#55FFFFFF") : (IsDarkMode ? Color.FromArgb("#33FFFFFF") : Color.FromArgb("#22000000"));
-        public Color AttachmentBgColor => IsMine ? Color.FromArgb("#33FFFFFF") : (IsDarkMode ? Color.FromArgb("#33FFFFFF") : Color.FromArgb("#11000000"));
-
-        // Events & Commands
-        public Action<MessageViewModel>? OnMenuRequest;
-        public Action<string>? OnOpenDMRequest;
-
-        public ICommand OpenFileCommand { get; }
-        public ICommand ViewMediaCommand { get; }
-        public ICommand CopyCommand { get; }
-        public ICommand ReplyCommand { get; }
-        public ICommand ForwardCommand { get; }
-        public ICommand DeleteCommand { get; }
-        public ICommand OpenMenuCommand { get; }
-        public ICommand OpenDMCommand { get; }
-
-        public MessageViewModel()
-        {
-            OpenMenuCommand = new Command(() => OnMenuRequest?.Invoke(this));
-            OpenDMCommand = new Command(() => OnOpenDMRequest?.Invoke(SenderId));
-
-            CopyCommand = new Command(async () => await Clipboard.SetTextAsync(Text));
-            ReplyCommand = new Command(() => OnMenuRequest?.Invoke(this));
-            ForwardCommand = new Command(() => OnMenuRequest?.Invoke(this));
-            DeleteCommand = new Command(() => OnMenuRequest?.Invoke(this));
-
-            OpenFileCommand = new Command(async () => {
-                if (!string.IsNullOrEmpty(FileUrl)) try { await Launcher.OpenAsync(new Uri(FileUrl)); } catch { }
-            });
-
-            ViewMediaCommand = new Command(async () => {
-                if (IsImage) await Application.Current!.Windows[0].Page!.Navigation.PushModalAsync(new MediaViewerPage(FileUrl));
-                else if (!string.IsNullOrEmpty(FileUrl)) await Launcher.OpenAsync(new Uri(FileUrl));
-            });
-        }
-
-        public void ProcessMentions()
-        {
-            var fs = new FormattedString();
-
-            if (string.IsNullOrEmpty(Text))
-            {
-                MessageFormatted = fs;
-                return;
-            }
-
-            string[] parts = Regex.Split(Text, @"(\s+)");
-
-            foreach (var part in parts)
-            {
-                var span = new Span { Text = part, TextColor = TextColor };
-
-                if (part.Trim().StartsWith("@") && part.Length > 1)
+                if (word.StartsWith("@") && word.Length > 1)
                 {
-                    span.TextColor = IsMine ? Color.FromArgb("#ADD8E6") : Colors.DeepSkyBlue;
-                    span.FontAttributes = FontAttributes.Bold;
-                    span.TextDecorations = TextDecorations.Underline;
-
-                    var handle = part.Trim();
-                    var gesture = new TapGestureRecognizer
+                    var span = new Span
                     {
-                        Command = new Command(async () =>
-                        {
-                            await ChatListPage.Client.GetChannelByHandle(handle);
-                        })
+                        Text = word + " ",
+                        TextColor = Color.FromArgb("#3b82f6"),
+                        TextDecorations = TextDecorations.Underline
                     };
-                    span.GestureRecognizers.Add(gesture);
+                    span.GestureRecognizers.Add(new TapGestureRecognizer
+                    {
+                        Command = new Command(() =>
+                        {
+                            Application.Current?.MainPage?.Navigation.PushAsync(new ChannelPreviewPage(word.Substring(1)));
+                        })
+                    });
+                    formatted.Spans.Add(span);
                 }
-
-                fs.Spans.Add(span);
+                else
+                {
+                    formatted.Spans.Add(new Span { Text = word + " ", TextColor = TextColor });
+                }
             }
-            MessageFormatted = fs;
-        }
 
-        public void RefreshColors()
-        {
-            OnPropertyChanged(nameof(BubbleColor)); OnPropertyChanged(nameof(TextColor));
-            OnPropertyChanged(nameof(SenderColor)); OnPropertyChanged(nameof(ReplyQuoteColor));
-            OnPropertyChanged(nameof(AttachmentBgColor));
-            ProcessMentions();
+            return formatted;
         }
-
-        public event PropertyChangedEventHandler? PropertyChanged;
-        protected void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
     }
+
+    public string Time { get; set; } = "";
+    public bool IsOutgoing { get; set; }
+    public bool IsIncoming => !IsOutgoing;
+
+    public Color BubbleColor => IsDarkMode ? Color.FromArgb("#374151") : Color.FromArgb("#e5e7eb");
+    public Color TextColor => IsDarkMode ? Colors.White : Colors.Black;
+    public Color SenderColor => Color.FromArgb("#f97316");
+    public Color ReplyQuoteColor => IsDarkMode ? Color.FromArgb("#1f2937") : Color.FromArgb("#d1d5db");
+    public Color AttachmentBgColor => IsDarkMode ? Color.FromArgb("#1f2937") : Color.FromArgb("#f3f4f6");
+
+    public string? FileUrl { get; set; }
+    public string? FileName { get; set; }
+    public bool IsImage { get; set; }
+    public bool IsVideo { get; set; }
+    public bool IsAudio { get; set; }
+    public bool ShowGenericFile { get; set; }
+
+    public bool IsTheme { get; set; }
+    public string? ThemeName { get; set; }
+
+    public bool IsReply { get; set; }
+    public string? ReplyToId { get; set; }
+    public string? ReplyToName { get; set; }
+    public string? ReplyToText { get; set; }
+
+    public bool IsForwarded { get; set; }
+    public string? ForwardedFrom { get; set; }
+    public string ForwardedLabel => IsForwarded ? $"Forwarded from {ForwardedFrom}" : "";
+
+    // NEW: Seen status
+    private List<string> _seenBy = new List<string>();
+    public List<string> SeenBy
+    {
+        get => _seenBy;
+        set
+        {
+            _seenBy = value;
+            OnPropertyChanged();
+            OnPropertyChanged(nameof(SeenStatus));
+            OnPropertyChanged(nameof(SeenCheckColor));
+            OnPropertyChanged(nameof(ShowSeenCheckmarks));
+        }
+    }
+
+    // NEW: Checkmark display
+    public string SeenStatus
+    {
+        get
+        {
+            if (!IsOutgoing) return "";
+
+            if (SeenBy != null && SeenBy.Count > 0)
+            {
+                // Seen by someone - blue double check
+                return "✓✓";
+            }
+            else
+            {
+                // Sent but not seen - grey single check
+                return "✓";
+            }
+        }
+    }
+
+    public Color SeenCheckColor => (SeenBy != null && SeenBy.Count > 0)
+    ? Color.FromArgb("#ffffff")  // ✅ White for seen (visible on blue bubble)
+    : Color.FromArgb("#b8d4ff");  // ✅ Light blue for unseen (visible on blue bubble)
+
+    public bool ShowSeenCheckmarks => IsOutgoing;
+
+    public ICommand OpenDMCommand { get; }
+    public ICommand ViewMediaCommand { get; }
+    public ICommand OpenFileCommand { get; }
+    public ICommand OpenMenuCommand { get; }
+
+    public MessageViewModel()
+    {
+        OpenDMCommand = new Command(OnOpenDM);
+        ViewMediaCommand = new Command(OnViewMedia);
+        OpenFileCommand = new Command(OnOpenFile);
+        OpenMenuCommand = new Command(OnOpenMenu);
+    }
+
+    public static MessageViewModel FromServerMessage(ServerMessage msg, NoveoClient client)
+    {
+        var vm = new MessageViewModel
+        {
+            MessageId = msg.MessageId ?? "",
+            SenderId = msg.SenderId ?? "",
+            SenderName = client.GetUserName(msg.SenderId),
+            AvatarUrl = client.GetUserAvatar(msg.SenderId),
+            Time = DateTimeOffset.FromUnixTimeMilliseconds(msg.Timestamp).ToLocalTime().ToString("HH:mm"),
+            IsOutgoing = msg.SenderId == client.CurrentUserId,
+            SeenBy = msg.SeenBy ?? new List<string>()  // NEW
+        };
+
+        var parsed = client.ParseMessageContent(msg.Content);
+        vm.Text = parsed.Text;
+        vm.IsImage = parsed.IsImage;
+        vm.IsVideo = parsed.IsVideo;
+        vm.IsAudio = parsed.IsAudio;
+        vm.ShowGenericFile = parsed.IsFile && !parsed.IsImage && !parsed.IsVideo && !parsed.IsAudio;
+        vm.FileUrl = parsed.FileUrl;
+        vm.FileName = parsed.FileName;
+        vm.IsTheme = parsed.IsTheme;
+        vm.ThemeName = parsed.ThemeName;
+
+        if (!string.IsNullOrEmpty(msg.ReplyToId))
+        {
+            vm.IsReply = true;
+            vm.ReplyToId = msg.ReplyToId;
+            var replyMsg = client.AllChats.SelectMany(c => c.Messages ?? new List<ServerMessage>())
+                .FirstOrDefault(m => m.MessageId == msg.ReplyToId);
+            if (replyMsg != null)
+            {
+                vm.ReplyToName = client.GetUserName(replyMsg.SenderId);
+                var replyParsed = client.ParseMessageContent(replyMsg.Content);
+                vm.ReplyToText = replyParsed.Text;
+            }
+        }
+
+        if (parsed.IsForwarded)
+        {
+            vm.IsForwarded = true;
+            vm.ForwardedFrom = parsed.ForwardedFrom;
+        }
+
+        return vm;
+    }
+
+    public void RefreshColors()
+    {
+        OnPropertyChanged(nameof(BubbleColor));
+        OnPropertyChanged(nameof(TextColor));
+        OnPropertyChanged(nameof(ReplyQuoteColor));
+        OnPropertyChanged(nameof(AttachmentBgColor));
+        OnPropertyChanged(nameof(MessageFormatted));
+    }
+
+    private void OnOpenDM()
+    {
+        if (IsOutgoing) return;
+        var client = ChatListPage.Client;
+        var ids = new List<string> { client.CurrentUserId, SenderId };
+        ids.Sort();
+        string chatId = string.Join("_", ids);
+
+        if (DeviceInfo.Idiom != DeviceIdiom.Desktop)
+        {
+            Application.Current?.MainPage?.Navigation.PushAsync(new MobileChatPage(chatId, SenderName, SenderId));
+        }
+    }
+
+    private void OnViewMedia()
+    {
+        if (!string.IsNullOrEmpty(FileUrl))
+        {
+            Application.Current?.MainPage?.Navigation.PushAsync(new MediaViewerPage(FileUrl));
+        }
+    }
+
+    private async void OnOpenFile()
+    {
+        if (!string.IsNullOrEmpty(FileUrl))
+        {
+            try
+            {
+                await Launcher.OpenAsync(new Uri(FileUrl));
+            }
+            catch { }
+        }
+    }
+
+    private void OnOpenMenu() { }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    public void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

@@ -1,18 +1,23 @@
-﻿namespace NoveoNative
+﻿namespace NoveoNative;
+
+public partial class App : Application
 {
-    public partial class App : Application
+    public App()
     {
-        public App()
+        InitializeComponent();
+
+        // LOAD SAVED DARK MODE ON STARTUP
+        bool isDarkMode = SettingsManager.LoadDarkMode();
+
+        if (isDarkMode)
         {
-            InitializeComponent();
-
-            // Set theme on startup
-            if (SettingsManager.IsDarkMode)
-                Application.Current!.UserAppTheme = AppTheme.Dark;
-            else
-                Application.Current!.UserAppTheme = AppTheme.Light;
-
-            MainPage = new ChatListPage();
+            UserAppTheme = AppTheme.Dark;
         }
+        else
+        {
+            UserAppTheme = AppTheme.Light;
+        }
+
+        MainPage = new NavigationPage(new ChatListPage());
     }
 }

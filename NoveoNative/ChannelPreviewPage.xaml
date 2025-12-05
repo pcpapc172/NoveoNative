@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             x:Class="NoveoNative.ChannelPreviewPage"
+             BackgroundColor="{Binding MainBgColor}"
+             NavigationPage.HasNavigationBar="False"
+             Shell.NavBarIsVisible="False">
+
+    <Grid RowDefinitions="Auto,*,Auto">
+        <!-- Header -->
+        <Border Grid.Row="0" BackgroundColor="{Binding CardBgColor}" Padding="15,10" StrokeThickness="0">
+            <Grid ColumnDefinitions="Auto,*">
+                <Button Grid.Column="0" Text="←" BackgroundColor="Transparent" 
+                        TextColor="{Binding TextColor}" FontSize="24" 
+                        Clicked="OnClose" WidthRequest="40" HeightRequest="40"/>
+                <Label Grid.Column="1" Text="Channel Preview" FontSize="20" FontAttributes="Bold"
+                       TextColor="{Binding TextColor}" VerticalOptions="Center" Margin="10,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Channel Info -->
+        <ScrollView Grid.Row="1" Padding="20">
+            <VerticalStackLayout Spacing="20" HorizontalOptions="Center">
+                <!-- Avatar -->
+                <Border StrokeShape="RoundRectangle 60" 
+                        HeightRequest="120" WidthRequest="120" 
+                        HorizontalOptions="Center"
+                        BackgroundColor="#3b82f6"
+                        StrokeThickness="0">
+                    <Grid>
+                        <Label x:Name="AvatarLetter" FontSize="48" TextColor="White" 
+                               HorizontalOptions="Center" VerticalOptions="Center" 
+                               FontAttributes="Bold"/>
+                        <Image x:Name="AvatarImage" Aspect="AspectFill" IsVisible="False"/>
+                    </Grid>
+                </Border>
+
+                <!-- Channel Name -->
+                <Label x:Name="ChannelName" FontSize="24" FontAttributes="Bold" 
+                       TextColor="{Binding TextColor}" HorizontalOptions="Center"/>
+
+                <!-- Channel Handle -->
+                <Label x:Name="ChannelHandle" FontSize="16" TextColor="Gray" 
+                       HorizontalOptions="Center"/>
+
+                <!-- Member Count -->
+                <Label x:Name="MemberCount" FontSize="14" TextColor="Gray" 
+                       HorizontalOptions="Center"/>
+
+                <!-- Description (if any) -->
+                <Label x:Name="Description" FontSize="14" TextColor="{Binding TextColor}" 
+                       HorizontalOptions="Center" HorizontalTextAlignment="Center"
+                       IsVisible="False"/>
+            </VerticalStackLayout>
+        </ScrollView>
+
+        <!-- Join Button -->
+        <Button Grid.Row="2" x:Name="JoinButton" Text="Join Channel" 
+                BackgroundColor="#3b82f6" TextColor="White"
+                Margin="20,10" HeightRequest="50"
+                FontSize="16" FontAttributes="Bold"
+                Clicked="OnJoinClicked"/>
+    </Grid>
+</ContentPage>

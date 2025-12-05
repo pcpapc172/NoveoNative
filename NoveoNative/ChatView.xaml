@@ -8,8 +8,6 @@
 
     <ContentView.Resources>
         <ResourceDictionary>
-            <local:MessageDataTemplateSelector x:Key="MessageSelector"/>
-
             <!-- INCOMING -->
             <DataTemplate x:Key="IncomingMessageTemplate" x:DataType="local:MessageViewModel">
                 <Grid Padding="5" ColumnDefinitions="40, *">
@@ -139,7 +137,13 @@
                                 <Label Text="{Binding ThemeName}" TextColor="White"/>
                             </StackLayout>
                             <Label FormattedText="{Binding MessageFormatted}" IsVisible="{Binding HasText}" FontSize="15"/>
-                            <Label Text="{Binding Time}" TextColor="#e0e0e0" FontSize="9" HorizontalOptions="End"/>
+
+                            <!-- NEW: Time with checkmarks -->
+                            <StackLayout Orientation="Horizontal" HorizontalOptions="End" Spacing="3">
+                                <Label Text="{Binding Time}" TextColor="#e0e0e0" FontSize="9"/>
+                                <Label Text="{Binding SeenStatus}" TextColor="{Binding SeenCheckColor}" 
+                                       FontSize="10" FontAttributes="Bold" IsVisible="{Binding ShowSeenCheckmarks}"/>
+                            </StackLayout>
                         </VerticalStackLayout>
                     </Border>
                 </Grid>
@@ -147,12 +151,67 @@
         </ResourceDictionary>
     </ContentView.Resources>
 
-    <Grid RowDefinitions="*,Auto,Auto">
-        <ActivityIndicator Grid.Row="0" IsRunning="{Binding IsLoading}" IsVisible="{Binding IsLoading}" VerticalOptions="Center" HorizontalOptions="Center" Color="#3b82f6" HeightRequest="50" WidthRequest="50" ZIndex="5"/>
+    <Grid RowDefinitions="Auto,*,Auto,Auto">
 
-        <CollectionView x:Name="MessagesList" Grid.Row="0" ItemTemplate="{StaticResource MessageSelector}" Margin="0,0,0,5"/>
+        <!-- HEADER BAR -->
+        <Border Grid.Row="0" BackgroundColor="{Binding HeaderBgColor}" 
+                Padding="10" StrokeThickness="0"
+                IsVisible="{Binding HasActiveChat}">
+            <Grid ColumnDefinitions="50,*">
+                <!-- Avatar -->
+                <Border Grid.Column="0" StrokeShape="RoundRectangle 20" 
+                        HeightRequest="40" WidthRequest="40" 
+                        BackgroundColor="{Binding ChatAvatarBgColor}"
+                        StrokeThickness="0">
+                    <Grid>
+                        <Label Text="{Binding ChatAvatarLetter}" TextColor="White" 
+                               FontSize="18" FontAttributes="Bold"
+                               HorizontalOptions="Center" VerticalOptions="Center"
+                               IsVisible="{Binding ShowAvatarLetter}"/>
+                        <Image Source="{Binding ChatAvatarUrl}" Aspect="AspectFill"
+                               IsVisible="{Binding ShowAvatarImage}">
+                            <Image.Clip>
+                                <EllipseGeometry Center="20,20" RadiusX="20" RadiusY="20"/>
+                            </Image.Clip>
+                        </Image>
+                    </Grid>
+                </Border>
 
-        <Grid Grid.Row="1" BackgroundColor="#e0e0e0" Padding="10" IsVisible="{Binding IsPreviewActive}">
+                <!-- Info -->
+                <VerticalStackLayout Grid.Column="1" VerticalOptions="Center" Padding="10,0,0,0">
+                    <Label Text="{Binding ChatName}" FontSize="16" FontAttributes="Bold" 
+                           TextColor="{Binding TextColor}"/>
+                    <Label Text="{Binding ChatSubtitle}" FontSize="12" TextColor="Gray"
+                           IsVisible="{Binding ShowSubtitle}"/>
+                </VerticalStackLayout>
+            </Grid>
+        </Border>
+
+        <!-- Messages Container -->
+        <Grid Grid.Row="1">
+            <ActivityIndicator IsRunning="{Binding IsLoading}" IsVisible="{Binding IsLoading}" 
+                               VerticalOptions="Center" HorizontalOptions="Center" 
+                               Color="#3b82f6" HeightRequest="50" WidthRequest="50" ZIndex="5"/>
+
+            <!-- NEW: Typing Indicator -->
+            <Label x:Name="TypingIndicator" 
+                   Text="{Binding TypingStatus}" 
+                   TextColor="Gray" FontSize="12" FontAttributes="Italic"
+                   Padding="15,5" VerticalOptions="Start" HorizontalOptions="Start"
+                   IsVisible="{Binding ShowTypingIndicator}"
+                   ZIndex="4"/>
+
+            <CollectionView x:Name="MessagesList" Margin="0,0,0,5">
+                <CollectionView.ItemTemplate>
+                    <local:MessageDataTemplateSelector 
+                        IncomingMessageTemplate="{StaticResource IncomingMessageTemplate}"
+                        OutgoingMessageTemplate="{StaticResource OutgoingMessageTemplate}"/>
+                </CollectionView.ItemTemplate>
+            </CollectionView>
+        </Grid>
+
+        <!-- Preview Bar -->
+        <Grid Grid.Row="2" BackgroundColor="#e0e0e0" Padding="10" IsVisible="{Binding IsPreviewActive}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="30"/>
@@ -169,14 +228,24 @@
             <Button Grid.Column="1" Text="✕" BackgroundColor="Transparent" TextColor="Red" Clicked="OnCancelPreview" Padding="0"/>
         </Grid>
 
-        <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Padding="10" BackgroundColor="{Binding InputBgColor}" IsVisible="{Binding CanSend}">
-            <Button Grid.Column="0" Text="📎" BackgroundColor="Transparent" TextColor="#3b82f6" FontSize="22" Padding="0" Margin="0" Clicked="OnAttachClicked" WidthRequest="45" HeightRequest="45"/>
-            <Border Grid.Column="1" StrokeShape="RoundRectangle 20" Stroke="LightGray" Padding="10,0" BackgroundColor="{Binding EntryBgColor}" Margin="5,0">
-                <Entry x:Name="MsgEntry" Placeholder="Message..." TextColor="{Binding EntryTextColor}" PlaceholderColor="Gray" ReturnType="Send" Completed="OnEntryCompleted" ReturnCommand="{Binding SendCommand}"/>
+        <!-- Input Bar -->
+        <Grid Grid.Row="3" ColumnDefinitions="Auto,*,Auto" Padding="10" 
+              BackgroundColor="{Binding InputBgColor}" IsVisible="{Binding CanSend}">
+            <Button Grid.Column="0" Text="📎" BackgroundColor="Transparent" TextColor="#3b82f6" 
+                    FontSize="22" Padding="0" Margin="0" Clicked="OnAttachClicked" 
+                    WidthRequest="45" HeightRequest="45"/>
+            <Border Grid.Column="1" StrokeShape="RoundRectangle 20" Stroke="LightGray" 
+                    Padding="10,0" BackgroundColor="{Binding EntryBgColor}" Margin="5,0">
+                <Entry x:Name="MsgEntry" Placeholder="Message..." TextColor="{Binding EntryTextColor}" 
+                       PlaceholderColor="Gray" ReturnType="Send" Completed="OnEntryCompleted" 
+                       ReturnCommand="{Binding SendCommand}"/>
             </Border>
-            <Button Grid.Column="2" Text="➤" BackgroundColor="#3b82f6" TextColor="White" WidthRequest="50" HeightRequest="50" CornerRadius="25" Clicked="OnSendClicked"/>
+            <Button Grid.Column="2" Text="➤" BackgroundColor="#3b82f6" TextColor="White" 
+                    WidthRequest="50" HeightRequest="50" CornerRadius="25" Clicked="OnSendClicked"/>
         </Grid>
 
-        <Label Grid.Row="2" Text="You cannot send messages in this channel." TextColor="Gray" HorizontalOptions="Center" VerticalOptions="Center" IsVisible="{Binding IsReadOnlyChannel}" Padding="15"/>
+        <Label Grid.Row="3" Text="You cannot send messages in this channel." TextColor="Gray" 
+               HorizontalOptions="Center" VerticalOptions="Center" 
+               IsVisible="{Binding IsReadOnlyChannel}" Padding="15"/>
     </Grid>
 </ContentView>

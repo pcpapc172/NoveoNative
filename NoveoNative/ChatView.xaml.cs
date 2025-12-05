@@ -7,235 +7,450 @@ namespace NoveoNative;
 
 public partial class ChatView : ContentView, INotifyPropertyChanged
 {
-    private string _currentChatId = "";
-    private string? _currentRecipientId = null; // For new DMs
-    private string? _replyToId;
-    private object? _attachedFileObj;
-    private MessageViewModel? _forwardMsg;
-
     public ObservableCollection<MessageViewModel> Messages { get; set; } = new ObservableCollection<MessageViewModel>();
 
-    // Props
-    public Color MainBgColor => MessageViewModel.IsDarkMode ? Color.FromArgb("#111827") : Color.FromArgb("#E5DDD5");
-    public Color InputBgColor => MessageViewModel.IsDarkMode ? Color.FromArgb("#1f2937") : Colors.White;
-    public Color EntryBgColor => MessageViewModel.IsDarkMode ? Color.FromArgb("#374151") : Color.FromArgb("#f0f0f0");
-    public Color EntryTextColor => MessageViewModel.IsDarkMode ? Colors.White : Colors.Black;
+    private string? _currentChatId;
+    private string? _currentRecipientId;
+    private Dictionary<string, System.Timers.Timer> _typingTimers = new Dictionary<string, System.Timers.Timer>();
 
-    public bool IsPreviewActive => IsReplying || IsFileAttached || IsUploading || IsForwarding;
-    private bool _isReplying; public bool IsReplying { get => _isReplying; set { _isReplying = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsPreviewActive)); } }
-    private string _replyText = ""; public string ReplyText { get => _replyText; set { _replyText = value; OnPropertyChanged(); } }
-    private bool _isForwarding; public bool IsForwarding { get => _isForwarding; set { _isForwarding = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsPreviewActive)); } }
-    private string _forwardText = ""; public string ForwardText { get => _forwardText; set { _forwardText = value; OnPropertyChanged(); } }
-    private bool _isFileAttached; public bool IsFileAttached { get => _isFileAttached; set { _isFileAttached = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsPreviewActive)); } }
-    private string _attachedFileName = ""; public string AttachedFileName { get => _attachedFileName; set { _attachedFileName = value; OnPropertyChanged(); } }
-    private bool _isUploading; public bool IsUploading { get => _isUploading; set { _isUploading = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsPreviewActive)); } }
-    private double _uploadProgress; public double UploadProgress { get => _uploadProgress; set { _uploadProgress = value; OnPropertyChanged(); } }
-    private bool _isLoading; public bool IsLoading { get => _isLoading; set { _isLoading = value; OnPropertyChanged(); } }
+    private bool _isLoading = false;
+    public bool IsLoading { get => _isLoading; set { _isLoading = value; OnPropertyChanged(); } }
 
-    private bool _canSend = true; public bool CanSend { get => _canSend; set { _canSend = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsReadOnlyChannel)); } }
-    public bool IsReadOnlyChannel => !CanSend;
+    // Header Bar Properties
+    private bool _hasActiveChat = false;
+    public bool HasActiveChat { get => _hasActiveChat; set { _hasActiveChat = value; OnPropertyChanged(); } }
 
-    public ICommand SendCommand { get; private set; }
+    private string _chatName = "";
+    public string ChatName { get => _chatName; set { _chatName = value; OnPropertyChanged(); } }
+
+    private string _chatSubtitle = "";
+    public string ChatSubtitle { get => _chatSubtitle; set { _chatSubtitle = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowSubtitle)); } }
+
+    public bool ShowSubtitle => !string.IsNullOrEmpty(_chatSubtitle);
+
+    private string _chatAvatarUrl = "";
+    public string ChatAvatarUrl { get => _chatAvatarUrl; set { _chatAvatarUrl = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowAvatarImage)); OnPropertyChanged(nameof(ShowAvatarLetter)); } }
+
+    private string _chatAvatarLetter = "#";
+    public string ChatAvatarLetter { get => _chatAvatarLetter; set { _chatAvatarLetter = value; OnPropertyChanged(); } }
+
+    public Color ChatAvatarBgColor => Color.FromArgb("#3b82f6");
+    public bool ShowAvatarLetter => string.IsNullOrEmpty(_chatAvatarUrl);
+    public bool ShowAvatarImage => !string.IsNullOrEmpty(_chatAvatarUrl);
+    public Color HeaderBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#1f2937") : Color.FromArgb("#f0f0f0");
+
+    // NEW: Typing Indicator
+    private string _typingStatus = "";
+    public string TypingStatus { get => _typingStatus; set { _typingStatus = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowTypingIndicator)); } }
+    public bool ShowTypingIndicator => !string.IsNullOrEmpty(_typingStatus);
+    private HashSet<string> _currentlyTyping = new HashSet<string>();
+
+    // Other properties
+    private bool _isReadOnlyChannel = false;
+    public bool IsReadOnlyChannel { get => _isReadOnlyChannel; set { _isReadOnlyChannel = value; OnPropertyChanged(); } }
+
+    private bool _canSend = true;
+    public bool CanSend { get => _canSend; set { _canSend = value; OnPropertyChanged(); } }
+
+    public Color MainBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#111827") : Colors.White;
+    public Color InputBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#1f2937") : Color.FromArgb("#f9f9f9");
+    public Color EntryBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#374151") : Colors.White;
+    public Color EntryTextColor => SettingsManager.IsDarkMode ? Colors.White : Colors.Black;
+    public Color TextColor => SettingsManager.IsDarkMode ? Colors.White : Colors.Black;
+
+    private MessageViewModel? _replyToMessage;
+    private MessageViewModel? _forwardMessage;
+    private FileResult? _attachedFile;
+
+    public bool IsPreviewActive => _replyToMessage != null || _forwardMessage != null || _attachedFile != null || _uploadProgress > 0;
+    public bool IsReplying => _replyToMessage != null;
+    public bool IsForwarding => _forwardMessage != null;
+    public bool IsFileAttached => _attachedFile != null;
+    public string ReplyText => _replyToMessage != null ? $"Replying to {_replyToMessage.SenderName}: {_replyToMessage.Text}" : "";
+    public string ForwardText => _forwardMessage != null ? $"Forwarding message from {_forwardMessage.SenderName}" : "";
+    public string AttachedFileName => _attachedFile?.FileName ?? "";
+
+    private double _uploadProgress = 0;
+    public double UploadProgress { get => _uploadProgress; set { _uploadProgress = value; OnPropertyChanged(); OnPropertyChanged(nameof(IsUploading)); OnPropertyChanged(nameof(IsPreviewActive)); } }
+    public bool IsUploading => _uploadProgress > 0 && _uploadProgress < 1;
+
     public ICommand CtxReplyCommand { get; }
     public ICommand CtxForwardCommand { get; }
     public ICommand CtxCopyCommand { get; }
     public ICommand CtxDeleteCommand { get; }
+    public ICommand SendCommand { get; }
 
     public ChatView()
     {
         InitializeComponent();
         BindingContext = this;
-
-        var selector = (MessageDataTemplateSelector)Resources["MessageSelector"];
-        selector.IncomingTemplate = (DataTemplate)Resources["IncomingMessageTemplate"];
-        selector.OutgoingTemplate = (DataTemplate)Resources["OutgoingMessageTemplate"];
         MessagesList.ItemsSource = Messages;
 
-        SendCommand = new Command(() => OnSendClicked(this, EventArgs.Empty));
+        CtxReplyCommand = new Command<MessageViewModel>((msg) => OnReply(msg));
+        CtxForwardCommand = new Command<MessageViewModel>((msg) => OnForward(msg));
+        CtxCopyCommand = new Command<MessageViewModel>((msg) => OnCopy(msg));
+        CtxDeleteCommand = new Command<MessageViewModel>((msg) => OnDelete(msg));
+        SendCommand = new Command(() => OnSendClicked(null, EventArgs.Empty));
 
-        CtxReplyCommand = new Command<MessageViewModel>(vm => { _replyToId = vm.MessageId; ReplyText = $"Replying to {vm.SenderName}"; IsReplying = true; IsForwarding = false; });
-        CtxForwardCommand = new Command<MessageViewModel>(vm => { _forwardMsg = vm; ForwardText = "Forwarding..."; IsForwarding = true; IsReplying = false; });
-        CtxCopyCommand = new Command<MessageViewModel>(async vm => await Clipboard.SetTextAsync(vm.Text));
-        CtxDeleteCommand = new Command<MessageViewModel>(async vm => await ChatListPage.Client.DeleteMessage(_currentChatId, vm.MessageId));
+        ChatListPage.Client.OnMessageReceived += (msg) => MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (msg?.ChatId == _currentChatId)
+            {
+                var vm = MessageViewModel.FromServerMessage(msg, ChatListPage.Client);
+                Messages.Add(vm);
 
-        ChatListPage.Client.OnMessageReceived += OnNewMessage;
-        ChatListPage.Client.OnMessageDeleted += OnMessageDeleted;
-        ChatListPage.Client.OnUploadProgress += (p) => MainThread.BeginInvokeOnMainThread(() => UploadProgress = p);
+                // NEW: Auto-mark as seen if chat is open
+                if (msg.SenderId != ChatListPage.Client.CurrentUserId)
+                {
+                    ChatListPage.Client.MarkMessageAsSeen(msg.ChatId ?? "", msg.MessageId ?? "");
+                }
+            }
+            ScrollToBottom();
+        });
+
+        ChatListPage.Client.OnMessageDeleted += (msgId, chatId) => MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (chatId == _currentChatId)
+            {
+                var toRemove = Messages.FirstOrDefault(m => m.MessageId == msgId);
+                if (toRemove != null) Messages.Remove(toRemove);
+            }
+        });
+
+        // NEW: Typing indicator
+        ChatListPage.Client.OnUserTyping += (chatId, userId) => MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (chatId != _currentChatId || userId == ChatListPage.Client.CurrentUserId) return;
+
+            _currentlyTyping.Add(userId);
+            UpdateTypingStatus();
+
+            // Remove after 3 seconds
+            if (_typingTimers.ContainsKey(userId))
+            {
+                _typingTimers[userId].Stop();
+                _typingTimers[userId].Dispose();
+            }
+
+            var timer = new System.Timers.Timer(3000);
+            timer.Elapsed += (s, e) =>
+            {
+                MainThread.BeginInvokeOnMainThread(() =>
+                {
+                    _currentlyTyping.Remove(userId);
+                    UpdateTypingStatus();
+                    timer.Dispose();
+                    _typingTimers.Remove(userId);
+                });
+            };
+            timer.Start();
+            _typingTimers[userId] = timer;
+        });
+
+        // NEW: Seen status update
+        ChatListPage.Client.OnMessageSeen += (chatId, messageId, userId) => MainThread.BeginInvokeOnMainThread(() =>
+        {
+            if (chatId != _currentChatId) return;
+
+            var msg = Messages.FirstOrDefault(m => m.MessageId == messageId);
+            if (msg != null)
+            {
+                if (!msg.SeenBy.Contains(userId))
+                {
+                    msg.SeenBy.Add(userId);
+                    msg.OnPropertyChanged(nameof(msg.SeenBy));
+                }
+            }
+        });
+
+        // NEW: Send typing indicator when user types (throttled)
+        var typingTimer = new System.Timers.Timer(1000);
+        bool hasTyped = false;
+
+        MsgEntry.TextChanged += async (s, e) =>
+        {
+            if (!string.IsNullOrEmpty(_currentChatId) && !hasTyped)
+            {
+                hasTyped = true;
+                await ChatListPage.Client.SendTyping(_currentChatId);
+
+                typingTimer.Stop();
+                typingTimer.Start();
+            }
+        };
+
+        typingTimer.Elapsed += (s, e) =>
+        {
+            hasTyped = false;
+            typingTimer.Stop();
+        };
     }
 
-    private void OnEntryCompleted(object sender, EventArgs e) => OnSendClicked(this, EventArgs.Empty);
-
-    // Updated LoadChat to handle new DMs
-    public async void LoadChat(string chatId, string? recipientId = null)
+    private void UpdateTypingStatus()
     {
-        if (_currentChatId == chatId) return;
-        _currentChatId = chatId;
-        _currentRecipientId = recipientId; // Store for sending first message
-
-        IsLoading = true;
-        Messages.Clear();
-
-        var chat = ChatListPage.Client.AllChats.FirstOrDefault(c => c.ChatId == _currentChatId);
-
-        // Permissions
-        if (chat != null && chat.ChatType == "channel") CanSend = chat.OwnerId == ChatListPage.Client.CurrentUserId;
-        else CanSend = true;
-
-        if (chat?.Messages != null)
+        if (_currentlyTyping.Count == 0)
         {
-            var vms = await Task.Run(() => {
-                var list = new List<MessageViewModel>();
-                foreach (var m in chat.Messages) list.Add(CreateMessageVM(m, chat));
-                return list;
-            });
-            foreach (var vm in vms) Messages.Add(vm);
+            TypingStatus = "";
+        }
+        else if (_currentlyTyping.Count == 1)
+        {
+            var userId = _currentlyTyping.First();
+            var name = ChatListPage.Client.GetUserName(userId);
+            TypingStatus = $"{name} is typing...";
+        }
+        else if (_currentlyTyping.Count == 2)
+        {
+            var names = _currentlyTyping.Select(id => ChatListPage.Client.GetUserName(id)).ToList();
+            TypingStatus = $"{names[0]} and {names[1]} are typing...";
+        }
+        else
+        {
+            TypingStatus = $"{_currentlyTyping.Count} people are typing...";
+        }
+    }
+
+    public void LoadChat(string chatId, string? recipientId = null)
+    {
+        _currentChatId = chatId;
+        _currentRecipientId = recipientId;
+        Messages.Clear();
+        _currentlyTyping.Clear();
+        TypingStatus = "";
+        IsLoading = true;
+        HasActiveChat = true;
+
+        // Try to find existing chat
+        var chat = ChatListPage.Client.AllChats.FirstOrDefault(c => c.ChatId == chatId);
+
+        // Handle public lobby
+        if (chatId == ChatListPage.Client.PublicChatId)
+        {
+            ChatName = "Public Lobby";
+            ChatAvatarUrl = "";
+            ChatAvatarLetter = "🌍";
+
+            int totalOnline = ChatListPage.Client.Users.Values.Count(u => u.IsOnline);
+            ChatSubtitle = $"{totalOnline} users online";
+
+            IsReadOnlyChannel = false;
+            CanSend = true;
+
+            if (chat?.Messages != null)
+            {
+                foreach (var msg in chat.Messages)
+                {
+                    var vm = MessageViewModel.FromServerMessage(msg, ChatListPage.Client);
+                    Messages.Add(vm);
+
+                    // Mark unseen messages as seen
+                    if (msg.SenderId != ChatListPage.Client.CurrentUserId &&
+                        (msg.SeenBy == null || !msg.SeenBy.Contains(ChatListPage.Client.CurrentUserId)))
+                    {
+                        ChatListPage.Client.MarkMessageAsSeen(chatId, msg.MessageId ?? "");
+                    }
+                }
+            }
+        }
+        else if (chat != null)
+        {
+            IsReadOnlyChannel = chat.ChatType == "channel" && chat.OwnerId != ChatListPage.Client.CurrentUserId;
+            CanSend = !IsReadOnlyChannel;
+
+            if (chat.ChatType == "private" && !string.IsNullOrEmpty(recipientId))
+            {
+                ChatName = ChatListPage.Client.GetUserName(recipientId);
+                ChatAvatarUrl = ChatListPage.Client.GetUserAvatar(recipientId);
+                ChatAvatarLetter = ChatName.Substring(0, 1).ToUpper();
+                ChatSubtitle = ChatListPage.Client.IsUserOnline(recipientId) ? "online" : "offline";
+            }
+            else if (chat.ChatType == "channel")
+            {
+                ChatName = chat.ChatName ?? "Channel";
+                ChatAvatarUrl = ChatListPage.Client.GetFullUrl(chat.AvatarUrl);
+                ChatAvatarLetter = ChatName.Substring(0, 1).ToUpper();
+
+                int memberCount = chat.Members?.Count ?? 0;
+                int onlineCount = chat.Members?.Count(m => ChatListPage.Client.IsUserOnline(m)) ?? 0;
+                ChatSubtitle = $"{memberCount} members, {onlineCount} online";
+            }
+            else if (chat.ChatType == "public")
+            {
+                ChatName = "Public Lobby";
+                ChatAvatarUrl = "";
+                ChatAvatarLetter = "🌍";
+
+                int totalOnline = ChatListPage.Client.Users.Values.Count(u => u.IsOnline);
+                ChatSubtitle = $"{totalOnline} users online";
+            }
+
+            if (chat.Messages != null)
+            {
+                foreach (var msg in chat.Messages)
+                {
+                    var vm = MessageViewModel.FromServerMessage(msg, ChatListPage.Client);
+                    Messages.Add(vm);
+
+                    // NEW: Mark unseen messages as seen
+                    if (msg.SenderId != ChatListPage.Client.CurrentUserId &&
+                        (msg.SeenBy == null || !msg.SeenBy.Contains(ChatListPage.Client.CurrentUserId)))
+                    {
+                        ChatListPage.Client.MarkMessageAsSeen(chatId, msg.MessageId ?? "");
+                    }
+                }
+            }
+        }
+        else if (!string.IsNullOrEmpty(recipientId))
+        {
+            // New DM
+            ChatName = ChatListPage.Client.GetUserName(recipientId);
+            ChatAvatarUrl = ChatListPage.Client.GetUserAvatar(recipientId);
+            ChatAvatarLetter = ChatName.Substring(0, 1).ToUpper();
+            ChatSubtitle = ChatListPage.Client.IsUserOnline(recipientId) ? "online" : "offline";
+
+            IsReadOnlyChannel = false;
+            CanSend = true;
         }
 
         IsLoading = false;
-        await Task.Delay(100);
         ScrollToBottom();
     }
 
-    private void OnNewMessage(ServerMessage? msg)
+    public void RefreshColors()
     {
-        if (msg != null && msg.ChatId == _currentChatId)
-            MainThread.BeginInvokeOnMainThread(() => {
-                var chat = ChatListPage.Client.AllChats.FirstOrDefault(c => c.ChatId == _currentChatId);
-                Messages.Add(CreateMessageVM(msg, chat));
-                ScrollToBottom();
-            });
-    }
+        OnPropertyChanged(nameof(MainBgColor));
+        OnPropertyChanged(nameof(InputBgColor));
+        OnPropertyChanged(nameof(EntryBgColor));
+        OnPropertyChanged(nameof(EntryTextColor));
+        OnPropertyChanged(nameof(TextColor));
+        OnPropertyChanged(nameof(HeaderBgColor));
 
-    private void OnMessageDeleted(string msgId, string chatId)
-    {
-        if (chatId == _currentChatId)
+        foreach (var msg in Messages)
         {
-            MainThread.BeginInvokeOnMainThread(() => {
-                var item = Messages.FirstOrDefault(m => m.MessageId == msgId);
-                if (item != null) Messages.Remove(item);
-            });
+            msg.RefreshColors();
         }
-    }
-
-    private MessageViewModel CreateMessageVM(ServerMessage msg, Chat? chatContext)
-    {
-        var parsed = ChatListPage.Client.ParseMessageContent(msg.Content);
-        if (parsed.Text.Trim().StartsWith("{") && parsed.Text.Contains("\"text\"")) parsed = ChatListPage.Client.ParseMessageContent(parsed.Text);
-
-        bool isMine = msg.SenderId == ChatListPage.Client.CurrentUserId;
-        string avatar = ChatListPage.Client.GetUserAvatar(msg.SenderId);
-        string name = ChatListPage.Client.GetUserName(msg.SenderId);
-
-        string replyName = "", replyText = "";
-        bool isReply = !string.IsNullOrEmpty(msg.ReplyToId);
-
-        if (isReply && chatContext?.Messages != null)
-        {
-            var original = chatContext.Messages.FirstOrDefault(m => m.MessageId == msg.ReplyToId);
-            if (original != null)
-            {
-                replyName = ChatListPage.Client.GetUserName(original.SenderId);
-                var origParsed = ChatListPage.Client.ParseMessageContent(original.Content);
-                replyText = origParsed.IsFile ? "📎 Attachment" : origParsed.Text;
-            }
-        }
-
-        var vm = new MessageViewModel
-        {
-            MessageId = msg.MessageId ?? "",
-            SenderId = msg.SenderId ?? "",
-            SenderName = name,
-            SenderLetter = string.IsNullOrEmpty(name) ? "?" : name.Substring(0, 1).ToUpper(),
-            AvatarUrl = avatar,
-            HasAvatar = !string.IsNullOrEmpty(avatar),
-            HasNoAvatar = string.IsNullOrEmpty(avatar),
-            Text = parsed.Text,
-            HasText = !string.IsNullOrWhiteSpace(parsed.Text),
-            IsTheme = parsed.IsTheme,
-            ThemeName = parsed.ThemeName,
-            IsFile = parsed.IsFile,
-            IsImage = parsed.IsImage,
-            IsVideo = parsed.IsVideo,
-            IsAudio = parsed.IsAudio,
-            FileName = parsed.FileName,
-            FileUrl = parsed.FileUrl,
-            IsForwarded = parsed.IsForwarded,
-            ForwardedFrom = parsed.ForwardedFrom,
-            IsReply = isReply,
-            ReplyToName = replyName,
-            ReplyToText = replyText,
-            Time = DateTimeOffset.FromUnixTimeSeconds(msg.Timestamp).LocalDateTime.ToShortTimeString(),
-            IsMine = isMine
-        };
-
-        // FIX: Enable clickable mentions
-        vm.ProcessMentions();
-
-        vm.OnMenuRequest += ShowMessageOptions;
-
-        // FIX: Open DM on avatar click
-        vm.OnOpenDMRequest += (userId) => {
-            if (userId == ChatListPage.Client.CurrentUserId) return;
-
-            // 1. Calculate Chat ID
-            var ids = new List<string> { ChatListPage.Client.CurrentUserId, userId };
-            ids.Sort();
-            string chatId = string.Join("_", ids);
-
-            string name = ChatListPage.Client.GetUserName(userId);
-
-            if (DeviceInfo.Idiom == DeviceIdiom.Desktop) LoadChat(chatId, userId);
-            else Application.Current!.Windows[0].Page!.Navigation.PushAsync(new MobileChatPage(chatId, name, userId));
-        };
-
-        return vm;
-    }
-
-    private async void ShowMessageOptions(MessageViewModel vm)
-    {
-        string[] options = vm.IsMine ? new[] { "Reply", "Forward", "Copy", "Delete" } : new[] { "Reply", "Forward", "Copy" };
-        string action = await Application.Current!.Windows[0].Page!.DisplayActionSheet("Options", "Cancel", null, options);
-        if (action == "Reply") { _replyToId = vm.MessageId; ReplyText = $"Replying to {vm.SenderName}"; IsReplying = true; IsForwarding = false; }
-        else if (action == "Forward") { _forwardMsg = vm; ForwardText = "Forwarding..."; IsForwarding = true; IsReplying = false; }
-        else if (action == "Copy") { await Clipboard.SetTextAsync(vm.Text); }
-        else if (action == "Delete") { await ChatListPage.Client.DeleteMessage(_currentChatId, vm.MessageId); }
     }
 
     private async void OnAttachClicked(object sender, EventArgs e)
     {
-        var result = await FilePicker.PickAsync();
-        if (result != null)
+        var file = await FilePicker.PickAsync();
+        if (file != null)
         {
-            IsUploading = true; UploadProgress = 0;
-            _attachedFileObj = await ChatListPage.Client.UploadFile(result);
-            IsUploading = false;
-            if (_attachedFileObj != null) { AttachedFileName = result.FileName; IsFileAttached = true; }
-            else await Application.Current!.Windows[0].Page!.DisplayAlert("Error", "Upload failed", "OK");
+            _attachedFile = file;
+            OnPropertyChanged(nameof(IsFileAttached));
+            OnPropertyChanged(nameof(AttachedFileName));
+            OnPropertyChanged(nameof(IsPreviewActive));
         }
     }
 
-    private async void OnSendClicked(object sender, EventArgs e)
+    private async void OnSendClicked(object? sender, EventArgs e)
     {
-        if ((!string.IsNullOrWhiteSpace(MsgEntry.Text) || IsFileAttached || IsForwarding) && CanSend)
+        if (string.IsNullOrEmpty(_currentChatId)) return;
+
+        string text = MsgEntry.Text?.Trim() ?? "";
+        object? fileObj = null;
+
+        if (_attachedFile != null)
+        {
+            UploadProgress = 0.1;
+            var uploadResult = await ChatListPage.Client.UploadFile(_attachedFile);
+            if (uploadResult != null)
+            {
+                fileObj = uploadResult;
+            }
+            UploadProgress = 1.0;
+            await Task.Delay(300);
+            UploadProgress = 0;
+        }
+
+        if (!string.IsNullOrEmpty(text) || fileObj != null)
         {
             object? forwardInfo = null;
-            if (IsForwarding && _forwardMsg != null)
+            if (_forwardMessage != null)
             {
-                forwardInfo = new { from = _forwardMsg.SenderName, originalTs = DateTimeOffset.UtcNow.ToUnixTimeSeconds() };
-                if (string.IsNullOrWhiteSpace(MsgEntry.Text)) MsgEntry.Text = _forwardMsg.Text;
+                forwardInfo = new { from = _forwardMessage.SenderId, messageId = _forwardMessage.MessageId };
             }
 
-            // Pass RecipientID if this is a new chat
-            await ChatListPage.Client.SendMessage(_currentChatId, MsgEntry.Text, _attachedFileObj, _replyToId, forwardInfo, _currentRecipientId);
+            await ChatListPage.Client.SendMessage(_currentChatId, text, fileObj, _replyToMessage?.MessageId, forwardInfo, _currentRecipientId);
 
-            MsgEntry.Text = ""; OnCancelPreview(null, null);
-            // Reset recipient once sent, as chat will exist on next update
-            _currentRecipientId = null;
+            MsgEntry.Text = "";
+            _attachedFile = null;
+            _replyToMessage = null;
+            _forwardMessage = null;
+            OnPropertyChanged(nameof(IsPreviewActive));
+            OnPropertyChanged(nameof(IsReplying));
+            OnPropertyChanged(nameof(IsForwarding));
+            OnPropertyChanged(nameof(IsFileAttached));
         }
     }
-    private void OnCancelPreview(object sender, EventArgs e) { IsReplying = false; _replyToId = null; IsFileAttached = false; _attachedFileObj = null; IsUploading = false; IsForwarding = false; _forwardMsg = null; }
-    public void RefreshColors() { OnPropertyChanged(nameof(MainBgColor)); OnPropertyChanged(nameof(InputBgColor)); OnPropertyChanged(nameof(EntryBgColor)); OnPropertyChanged(nameof(EntryTextColor)); foreach (var m in Messages) m.RefreshColors(); }
-    private void ScrollToBottom() { if (Messages.Count > 0) try { MessagesList.ScrollTo(Messages.Last(), null, ScrollToPosition.End, false); } catch { } }
-    public new event PropertyChangedEventHandler? PropertyChanged;
-    protected new void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
+
+    private void OnEntryCompleted(object sender, EventArgs e) => OnSendClicked(sender, e);
+
+    private void OnCancelPreview(object sender, EventArgs e)
+    {
+        _replyToMessage = null;
+        _forwardMessage = null;
+        _attachedFile = null;
+        UploadProgress = 0;
+        OnPropertyChanged(nameof(IsPreviewActive));
+        OnPropertyChanged(nameof(IsReplying));
+        OnPropertyChanged(nameof(IsForwarding));
+        OnPropertyChanged(nameof(IsFileAttached));
+    }
+
+    private void OnReply(MessageViewModel msg)
+    {
+        _replyToMessage = msg;
+        _forwardMessage = null;
+        OnPropertyChanged(nameof(IsPreviewActive));
+        OnPropertyChanged(nameof(IsReplying));
+        OnPropertyChanged(nameof(IsForwarding));
+        OnPropertyChanged(nameof(ReplyText));
+        MsgEntry.Focus();
+    }
+
+    private void OnForward(MessageViewModel msg)
+    {
+        _forwardMessage = msg;
+        _replyToMessage = null;
+        OnPropertyChanged(nameof(IsPreviewActive));
+        OnPropertyChanged(nameof(IsReplying));
+        OnPropertyChanged(nameof(IsForwarding));
+        OnPropertyChanged(nameof(ForwardText));
+    }
+
+    private async void OnCopy(MessageViewModel msg)
+    {
+        if (!string.IsNullOrEmpty(msg.Text))
+        {
+            await Clipboard.SetTextAsync(msg.Text);
+        }
+    }
+
+    private async void OnDelete(MessageViewModel msg)
+    {
+        bool confirm = await Application.Current!.MainPage!.DisplayAlert("Delete", "Delete this message?", "Yes", "No");
+        if (confirm && _currentChatId != null)
+        {
+            await ChatListPage.Client.DeleteMessage(_currentChatId, msg.MessageId);
+        }
+    }
+
+    private void ScrollToBottom()
+    {
+        if (Messages.Count > 0)
+        {
+            MainThread.BeginInvokeOnMainThread(() =>
+            {
+                try
+                {
+                    MessagesList.ScrollTo(Messages[Messages.Count - 1], position: ScrollToPosition.End, animate: false);
+                }
+                catch { }
+            });
+        }
+    }
+
+    public event PropertyChangedEventHandler? PropertyChanged;
+    protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
+        PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
