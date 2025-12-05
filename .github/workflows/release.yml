@@ -100,6 +100,27 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: iOS-IPA-Unsigned
+          
+      - name: List downloaded files
+        run: |
+          echo "📂 Files in current directory:"
+          ls -la
+          echo "📂 Looking for IPA files:"
+          find . -name "*.ipa" -type f
+          
+      - name: Move IPA to root
+        run: |
+          if [ -f *.ipa ]; then
+            echo "IPA found in root"
+          else
+            echo "Searching for IPA..."
+            IPA_PATH=$(find . -name "*.ipa" -type f | head -1)
+            if [ -n "$IPA_PATH" ]; then
+              cp "$IPA_PATH" ./
+              echo "IPA copied to root"
+            fi
+          fi
+          ls -la *.ipa
 
       - name: Create Release
         id: create_release
@@ -112,6 +133,7 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+
 
   # 5. SIGN iOS IPA & DEPLOY
   sign-and-deploy:
