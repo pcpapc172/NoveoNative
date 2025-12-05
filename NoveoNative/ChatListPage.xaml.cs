@@ -8,22 +8,24 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
 {
     public static NoveoClient Client = new NoveoClient();
     public ObservableCollection<ChatViewModel> Chats { get; set; } = new ObservableCollection<ChatViewModel>();
-
     public bool IsDesktop => DeviceInfo.Idiom == DeviceIdiom.Desktop;
     public GridLength ListColumnWidth => IsDesktop ? new GridLength(300) : GridLength.Star;
     public GridLength ChatColumnWidth => IsDesktop ? GridLength.Star : new GridLength(0);
-
     public Color MainBgColor => SettingsManager.IsDarkMode ? Color.FromArgb("#111827") : Colors.White;
     public Color TextColor => SettingsManager.IsDarkMode ? Colors.White : Colors.Black;
+    public Color BorderColor => SettingsManager.IsDarkMode ? Color.FromArgb("#374151") : Color.FromArgb("#e5e7eb");
 
     private bool _isListEmpty = true;
     public bool IsListEmpty { get => _isListEmpty; set { _isListEmpty = value; OnPropertyChanged(); } }
 
     private bool _isLoginVisible = true;
     public bool IsLoginVisible { get => _isLoginVisible; set { _isLoginVisible = value; OnPropertyChanged(); } }
+
     private bool _isRegisterMode = false;
     public string LoginBtnText => _isRegisterMode ? "Register" : "Login";
     public string ToggleBtnText => _isRegisterMode ? "Already have an account? Login" : "Don't have an account? Register";
+
+    private bool _isMenuOpen = false;
 
     public ChatListPage()
     {
@@ -78,6 +80,7 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
                         if (Client.Users.ContainsKey(otherId)) isOnline = Client.Users[otherId].IsOnline;
                     }
                 }
+
                 if (string.IsNullOrEmpty(name) && c.ChatType == "channel") name = "Channel";
                 if (string.IsNullOrEmpty(name)) name = "Unknown Chat";
 
@@ -111,21 +114,19 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
             {
                 if (user.UserId == Client.CurrentUserId) continue;
 
-                // Calculate expected Chat ID: ID_ID (Sorted)
                 var ids = new List<string> { Client.CurrentUserId, user.UserId };
                 ids.Sort();
                 string expectedId = string.Join("_", ids);
 
                 if (!existingChatIds.Contains(expectedId))
                 {
-                    // Add as a new/empty entry
                     newItems.Add(new ChatViewModel
                     {
                         ChatId = expectedId,
                         DisplayName = user.Username,
                         AvatarUrl = Client.GetFullUrl(user.AvatarUrl),
                         AvatarLetter = user.Username.Substring(0, 1).ToUpper(),
-                        LastMessagePreview = user.IsOnline ? "Online" : "Offline", // Show status
+                        LastMessagePreview = user.IsOnline ? "Online" : "Offline",
                         IsPrivate = true,
                         OtherUserId = user.UserId,
                         IsOnline = user.IsOnline
@@ -133,20 +134,23 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
                 }
             }
 
-            // 3. Sort and Update UI
-            // Priority: Has Messages > Is Online > Name
             var sorted = newItems.OrderByDescending(x => x.LastMessagePreview != "Online" && x.LastMessagePreview != "Offline")
                                  .ThenByDescending(x => x.IsOnline)
                                  .ToList();
 
             Chats.Clear();
             foreach (var item in sorted) Chats.Add(item);
-
             if (Chats.Count == 0) IsListEmpty = true;
         });
     }
 
-    private void OnToggleLoginMode(object sender, EventArgs e) { _isRegisterMode = !_isRegisterMode; OnPropertyChanged(nameof(LoginBtnText)); OnPropertyChanged(nameof(ToggleBtnText)); }
+    private void OnToggleLoginMode(object sender, EventArgs e)
+    {
+        _isRegisterMode = !_isRegisterMode;
+        OnPropertyChanged(nameof(LoginBtnText));
+        OnPropertyChanged(nameof(ToggleBtnText));
+    }
+
     private async void OnLoginClicked(object sender, EventArgs e)
     {
         if (string.IsNullOrEmpty(UserEntry.Text) || string.IsNullOrEmpty(PassEntry.Text)) return;
@@ -154,26 +158,106 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
         if (_isRegisterMode) await Client.ConnectAndRegister(UserEntry.Text, PassEntry.Text);
         else await Client.ConnectAndLogin(UserEntry.Text, PassEntry.Text);
     }
+
     private void OnToggleTheme(object sender, EventArgs e)
     {
-        SettingsManager.IsDarkMode = !SettingsManager.IsDarkMode; MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
-        OnPropertyChanged(nameof(MainBgColor)); OnPropertyChanged(nameof(TextColor));
+        SettingsManager.IsDarkMode = !SettingsManager.IsDarkMode;
+
+        // Set app-wide theme
+        if (SettingsManager.IsDarkMode)
+            Application.Current!.UserAppTheme = AppTheme.Dark;
+        else
+            Application.Current!.UserAppTheme = AppTheme.Light;
+
+        MessageViewModel.IsDarkMode = SettingsManager.IsDarkMode;
+        OnPropertyChanged(nameof(MainBgColor));
+        OnPropertyChanged(nameof(TextColor));
+        OnPropertyChanged(nameof(BorderColor));
+
         foreach (var chat in Chats) chat.RefreshColor();
         if (IsDesktop) DesktopChatView.RefreshColors();
+
+        // Close menu after toggling
+        if (_isMenuOpen)
+        {
+            _isMenuOpen = false;
+            MenuBackdrop.IsVisible = false;
+            MenuDrawer.IsVisible = false;
+        }
     }
-    private async void OnSettingsClicked(object sender, EventArgs e) { await Navigation.PushAsync(new SettingsPage()); }
-    private void OnCreateChannel(object sender, EventArgs e) { Navigation.PushAsync(new CreateChannelPage()); }
+
+    private async void OnMenuClicked(object sender, EventArgs e)
+    {
+        _isMenuOpen = !_isMenuOpen;
+
+        if (_isMenuOpen)
+        {
+            MenuBackdrop.IsVisible = true;
+            MenuDrawer.IsVisible = true;
+            MenuDrawer.TranslationX = 0;
+            await MenuDrawer.TranslateTo(0, 0, 300, Easing.CubicOut);
+        }
+        else
+        {
+            await MenuDrawer.TranslateTo(-250, 0, 300, Easing.CubicOut);
+            MenuBackdrop.IsVisible = false;
+            MenuDrawer.IsVisible = false;
+        }
+    }
+
+    private async void OnMenuBackdropTapped(object sender, TappedEventArgs e)
+    {
+        if (_isMenuOpen)
+        {
+            _isMenuOpen = false;
+            await MenuDrawer.TranslateTo(-250, 0, 300, Easing.CubicOut);
+            MenuBackdrop.IsVisible = false;
+            MenuDrawer.IsVisible = false;
+        }
+    }
+
+    private async void OnSettingsClicked(object sender, EventArgs e)
+    {
+        // Close menu
+        if (_isMenuOpen)
+        {
+            _isMenuOpen = false;
+            await MenuDrawer.TranslateTo(-250, 0, 300, Easing.CubicOut);
+            MenuBackdrop.IsVisible = false;
+            MenuDrawer.IsVisible = false;
+        }
+
+        await Navigation.PushModalAsync(new SettingsPage());
+    }
+
+    private void OnCreateChannel(object sender, EventArgs e)
+    {
+        Navigation.PushModalAsync(new CreateChannelPage());
+    }
 
     private async void OnChatSelected(object sender, SelectionChangedEventArgs e)
     {
         if (e.CurrentSelection.FirstOrDefault() is ChatViewModel selectedChat)
         {
-            // Determine Recipient ID if it's a DM
             string recipientId = selectedChat.IsPrivate ? selectedChat.OtherUserId : null;
 
             if (IsDesktop) DesktopChatView.LoadChat(selectedChat.ChatId, recipientId);
-            else await Navigation.PushAsync(new MobileChatPage(selectedChat.ChatId, selectedChat.DisplayName, recipientId));
+            else await Navigation.PushModalAsync(new MobileChatPage(selectedChat.ChatId, selectedChat.DisplayName, recipientId));
+
             ChatListCollectionView.SelectedItem = null;
         }
     }
+
+    private async void OnLogout(object sender, EventArgs e)
+    {
+        bool confirm = await DisplayAlert("Logout", "Are you sure you want to logout?", "Yes", "No");
+        if (confirm)
+        {
+            SettingsManager.ClearSession();
+            Application.Current!.MainPage = new ChatListPage();
+        }
+    }
+
+    public new event PropertyChangedEventHandler? PropertyChanged;
+    protected new void OnPropertyChanged([CallerMemberName] string? name = null) => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }

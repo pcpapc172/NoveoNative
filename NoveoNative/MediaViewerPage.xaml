@@ -3,16 +3,36 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              x:Class="NoveoNative.MediaViewerPage"
              BackgroundColor="Black"
-             Title="Media">
+             NavigationPage.HasNavigationBar="False"
+             Shell.NavBarIsVisible="False">
+
     <Grid>
         <!-- Close Button -->
-        <Button Text="✕" TextColor="White" BackgroundColor="#88000000"
-                VerticalOptions="Start" HorizontalOptions="End"
-                Margin="20" Clicked="OnCloseClicked" ZIndex="2"/>
+        <Button Text="✕" TextColor="White" 
+                BackgroundColor="#88000000"
+                FontSize="24"
+                VerticalOptions="Start" 
+                HorizontalOptions="End"
+                WidthRequest="50" HeightRequest="50"
+                CornerRadius="25"
+                Margin="20" 
+                Clicked="OnCloseClicked" 
+                ZIndex="2"/>
 
-        <!-- Zoomable Image Container -->
-        <ScrollView Orientation="Both">
-            <Image x:Name="FullImage" Aspect="AspectFit" VerticalOptions="Center" HorizontalOptions="Center"/>
+        <!-- Pinch-to-Zoom Image -->
+        <ScrollView Orientation="Both" 
+                    HorizontalOptions="FillAndExpand" 
+                    VerticalOptions="FillAndExpand">
+            <Image x:Name="FullImage" 
+                   Aspect="AspectFit"
+                   HorizontalOptions="Center" 
+                   VerticalOptions="Center"
+                   MinimumWidthRequest="300"
+                   MinimumHeightRequest="300">
+                <Image.GestureRecognizers>
+                    <PinchGestureRecognizer PinchUpdated="OnPinchUpdated"/>
+                </Image.GestureRecognizers>
+            </Image>
         </ScrollView>
     </Grid>
 </ContentPage>

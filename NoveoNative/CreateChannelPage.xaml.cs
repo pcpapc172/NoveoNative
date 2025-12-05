@@ -4,15 +4,15 @@ using System.Text.RegularExpressions;
 
 namespace NoveoNative;
 
-public partial class CreateChannelPage : ContentPage, INotifyPropertyChanged
+public partial class CreateChannelPage : BaseContentPage
 {
     private FileResult? _selectedAvatar;
-
     private bool _hasSelectedAvatar;
+
     public bool HasSelectedAvatar
     {
         get => _hasSelectedAvatar;
-        set { _hasSelectedAvatar = value; NotifyPropertyChanged(); NotifyPropertyChanged(nameof(ShowDefaultAvatar)); }
+        set { _hasSelectedAvatar = value; OnPropertyChanged(); OnPropertyChanged(nameof(ShowDefaultAvatar)); }
     }
 
     public bool ShowDefaultAvatar => !HasSelectedAvatar;
@@ -52,7 +52,6 @@ public partial class CreateChannelPage : ContentPage, INotifyPropertyChanged
         var name = ChannelNameEntry.Text?.Trim();
         var handle = HandleEntry.Text?.Trim();
 
-        // Validation
         if (string.IsNullOrEmpty(name))
         {
             ShowStatus("Channel name is required", true);
@@ -65,28 +64,22 @@ public partial class CreateChannelPage : ContentPage, INotifyPropertyChanged
             return;
         }
 
-        // Validate handle format (only letters, numbers, underscores)
         if (!Regex.IsMatch(handle, @"^[a-zA-Z0-9_]+$"))
         {
             ShowStatus("Handle can only contain letters, numbers, and underscores", true);
             return;
         }
 
-        // Ensure handle doesn't start with @
         if (handle.StartsWith("@"))
             handle = handle.Substring(1);
 
         try
         {
             ShowStatus("Creating channel...", false);
-
             await ChatListPage.Client.CreateChannel(name, handle, _selectedAvatar);
-
             ShowStatus("Channel created successfully!", false);
-
-            // Wait a bit then go back
             await Task.Delay(1000);
-            await Navigation.PopAsync();
+            await Navigation.PopModalAsync();
         }
         catch (Exception ex)
         {
@@ -101,7 +94,12 @@ public partial class CreateChannelPage : ContentPage, INotifyPropertyChanged
         StatusLabel.IsVisible = true;
     }
 
+    private async void OnClose(object sender, EventArgs e)
+    {
+        await Navigation.PopModalAsync();
+    }
+
     public new event PropertyChangedEventHandler? PropertyChanged;
-    protected void NotifyPropertyChanged([CallerMemberName] string? propertyName = null)
+    protected new void OnPropertyChanged([CallerMemberName] string? propertyName = null)
         => PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(propertyName));
 }

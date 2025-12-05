@@ -1,14 +1,18 @@
-﻿namespace NoveoNative;
-
-public partial class App : Application
+﻿namespace NoveoNative
 {
-    public App()
+    public partial class App : Application
     {
-        InitializeComponent();
-    }
+        public App()
+        {
+            InitializeComponent();
 
-    protected override Window CreateWindow(IActivationState? activationState)
-    {
-        return new Window(new NavigationPage(new ChatListPage()));
+            // Set theme on startup
+            if (SettingsManager.IsDarkMode)
+                Application.Current!.UserAppTheme = AppTheme.Dark;
+            else
+                Application.Current!.UserAppTheme = AppTheme.Light;
+
+            MainPage = new ChatListPage();
+        }
     }
 }

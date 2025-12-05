@@ -1,34 +1,101 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+<local:BaseContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:NoveoNative"
              x:Class="NoveoNative.SettingsPage"
-             Title="Settings"
-             BackgroundColor="White">
-    <ScrollView>
-        <VerticalStackLayout Padding="20" Spacing="25">
+             BackgroundColor="{Binding PageBgColor}"
+             NavigationPage.HasNavigationBar="False"
+             Shell.NavBarIsVisible="False">
 
-            <!-- Avatar Section -->
-            <VerticalStackLayout Spacing="10" HorizontalOptions="Center">
-                <Border StrokeShape="RoundRectangle 60" HeightRequest="120" WidthRequest="120" Stroke="#3b82f6" StrokeThickness="2">
-                    <Image x:Name="AvatarImage" Aspect="AspectFill" BackgroundColor="LightGray"/>
+    <Grid RowDefinitions="Auto,*" BackgroundColor="{Binding PageBgColor}">
+
+        <!-- Custom Header -->
+        <Border Grid.Row="0" BackgroundColor="{Binding CardBgColor}" Padding="15,10" StrokeThickness="0">
+            <Grid ColumnDefinitions="Auto,*">
+                <Button Grid.Column="0" Text="←" BackgroundColor="Transparent" 
+                        TextColor="{Binding PageTextColor}" FontSize="24" 
+                        Clicked="OnClose" WidthRequest="40" HeightRequest="40"/>
+                <Label Grid.Column="1" Text="Settings" FontSize="20" FontAttributes="Bold"
+                       TextColor="{Binding PageTextColor}" VerticalOptions="Center" Margin="10,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <!-- Content -->
+        <ScrollView Grid.Row="1" Padding="20">
+            <VerticalStackLayout Spacing="20">
+
+                <!-- Avatar Section -->
+                <Border BackgroundColor="{Binding CardBgColor}" 
+                        StrokeThickness="1" Stroke="{Binding BorderColor}"
+                        Padding="20" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="15">
+                        <Label Text="Profile Picture" 
+                               TextColor="{Binding PageTextColor}" 
+                               FontSize="16" FontAttributes="Bold"/>
+                        <HorizontalStackLayout Spacing="15">
+                            <Border StrokeShape="RoundRectangle 40" 
+                                    HeightRequest="80" WidthRequest="80" 
+                                    Stroke="{Binding BorderColor}" 
+                                    StrokeThickness="2">
+                                <Image x:Name="AvatarImage" Aspect="AspectFill" BackgroundColor="{Binding InputBgColor}"/>
+                            </Border>
+                            <Button Text="Change Avatar" 
+                                    Clicked="OnUploadAvatar"
+                                    BackgroundColor="#3b82f6"
+                                    TextColor="White"
+                                    VerticalOptions="Center"/>
+                        </HorizontalStackLayout>
+                    </VerticalStackLayout>
                 </Border>
-                <Button Text="Change Avatar" Clicked="OnUploadAvatar" FontSize="12" HeightRequest="35" Padding="10,0"/>
-            </VerticalStackLayout>
 
-            <!-- Info Section -->
-            <VerticalStackLayout Spacing="5">
-                <Label Text="Display Name" TextColor="Gray" FontSize="12"/>
-                <Border StrokeShape="RoundRectangle 5" Stroke="LightGray" Padding="10,0">
-                    <Entry x:Name="UsernameEntry" TextColor="Black" Placeholder="Your Name"/>
+                <!-- Username Section -->
+                <Border BackgroundColor="{Binding CardBgColor}"
+                        StrokeThickness="1" Stroke="{Binding BorderColor}"
+                        Padding="20" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Username" 
+                               TextColor="{Binding PageTextColor}"
+                               FontSize="16" FontAttributes="Bold"/>
+                        <Border StrokeShape="RoundRectangle 8" 
+                                Stroke="{Binding BorderColor}" 
+                                Padding="10,5" 
+                                BackgroundColor="{Binding InputBgColor}">
+                            <Entry x:Name="UsernameEntry" 
+                                   BackgroundColor="Transparent"
+                                   TextColor="{Binding PageTextColor}"
+                                   PlaceholderColor="{Binding PlaceholderColor}"/>
+                        </Border>
+                        <Button Text="Save Username" 
+                                Clicked="OnSaveUsername"
+                                BackgroundColor="#3b82f6"
+                                TextColor="White"/>
+                    </VerticalStackLayout>
                 </Border>
-                <Button Text="Save Name" Clicked="OnSaveUsername" BackgroundColor="#3b82f6" TextColor="White" Margin="0,10,0,0"/>
+
+                <!-- Theme Toggle -->
+                <Border BackgroundColor="{Binding CardBgColor}"
+                        StrokeThickness="1" Stroke="{Binding BorderColor}"
+                        Padding="20" StrokeShape="RoundRectangle 12">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <Label Grid.Column="0" Text="Dark Mode" 
+                               TextColor="{Binding PageTextColor}"
+                               FontSize="16" 
+                               VerticalOptions="Center"/>
+                        <Switch Grid.Column="1"
+                                x:Name="ThemeSwitch"
+                                IsToggled="{x:Static local:SettingsManager.IsDarkMode}"
+                                Toggled="OnToggleTheme"
+                                OnColor="#3b82f6"/>
+                    </Grid>
+                </Border>
+
+                <!-- Logout Button -->
+                <Button Text="Logout" 
+                        Clicked="OnLogout"
+                        BackgroundColor="#ef4444"
+                        TextColor="White"
+                        Margin="0,20,0,0"/>
             </VerticalStackLayout>
-
-            <BoxView HeightRequest="1" Color="LightGray"/>
-
-            <!-- Danger Zone -->
-            <Button Text="Log Out" Clicked="OnLogout" BackgroundColor="#fee2e2" TextColor="Red" BorderColor="Red" BorderWidth="1"/>
-
-        </VerticalStackLayout>
-    </ScrollView>
-</ContentPage>
+        </ScrollView>
+    </Grid>
+</local:BaseContentPage>

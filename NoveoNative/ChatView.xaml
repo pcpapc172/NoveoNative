@@ -21,7 +21,6 @@
                         </Border.GestureRecognizers>
                         <Image Source="{Binding AvatarUrl}" Aspect="AspectFill" IsVisible="{Binding HasAvatar}"/>
                     </Border>
-                    <!-- Fallback Letter with Dynamic Color -->
                     <Border Grid.Column="0" StrokeShape="RoundRectangle 20" HeightRequest="35" WidthRequest="35" VerticalOptions="End" Margin="0,0,5,5" StrokeThickness="0" BackgroundColor="{Binding AvatarBgColor}" IsVisible="{Binding HasNoAvatar}">
                         <Border.GestureRecognizers>
                             <TapGestureRecognizer Command="{Binding OpenDMCommand}"/>
@@ -30,9 +29,6 @@
                     </Border>
 
                     <Border Grid.Column="1" StrokeShape="RoundRectangle 0,15,15,15" StrokeThickness="0" BackgroundColor="{Binding BubbleColor}" HorizontalOptions="Start" MaximumWidthRequest="350" Padding="8">
-                        <!-- ... (Rest of the template remains same as previous step) ... -->
-                        <!-- COPY PASTE THE INSIDE CONTENT FROM PREVIOUS STEP HERE IF NEEDED -->
-                        <!-- For brevity, assume the content of the bubble is unchanged from the last working version -->
                         <FlyoutBase.ContextFlyout>
                             <MenuFlyout>
                                 <MenuFlyoutItem Text="Reply" Command="{Binding Source={x:Reference ThisChatView}, Path=CtxReplyCommand}" CommandParameter="{Binding .}"/>
@@ -53,7 +49,7 @@
                                     <Label Text="{Binding ReplyToText}" TextColor="{Binding TextColor}" FontSize="10" LineBreakMode="TailTruncation"/>
                                 </VerticalStackLayout>
                             </Border>
-                            <Image Source="{Binding FileUrl}" IsVisible="{Binding IsImage}" Aspect="AspectFill" HeightRequest="200" WidthRequest="200" Margin="0,5">
+                            <Image Source="{Binding FileUrl}" IsVisible="{Binding IsImage}" Aspect="AspectFit" HeightRequest="200" WidthRequest="200" Margin="0,5">
                                 <Image.GestureRecognizers>
                                     <TapGestureRecognizer Command="{Binding ViewMediaCommand}"/>
                                 </Image.GestureRecognizers>
@@ -113,7 +109,7 @@
                                     <Label Text="{Binding ReplyToText}" TextColor="White" FontSize="10" LineBreakMode="TailTruncation"/>
                                 </VerticalStackLayout>
                             </Border>
-                            <Image Source="{Binding FileUrl}" IsVisible="{Binding IsImage}" Aspect="AspectFill" HeightRequest="200" WidthRequest="200" Margin="0,5">
+                            <Image Source="{Binding FileUrl}" IsVisible="{Binding IsImage}" Aspect="AspectFit" HeightRequest="200" WidthRequest="200" Margin="0,5">
                                 <Image.GestureRecognizers>
                                     <TapGestureRecognizer Command="{Binding ViewMediaCommand}"/>
                                 </Image.GestureRecognizers>
@@ -151,8 +147,6 @@
         </ResourceDictionary>
     </ContentView.Resources>
 
-    <!-- (Main Grid Layout Unchanged) -->
-    <!-- COPY THE MAIN GRID FROM PREVIOUS CHATVIEW.XAML HERE -->
     <Grid RowDefinitions="*,Auto,Auto">
         <ActivityIndicator Grid.Row="0" IsRunning="{Binding IsLoading}" IsVisible="{Binding IsLoading}" VerticalOptions="Center" HorizontalOptions="Center" Color="#3b82f6" HeightRequest="50" WidthRequest="50" ZIndex="5"/>
 
@@ -167,12 +161,12 @@
                 <Label Text="{Binding ReplyText}" TextColor="#3b82f6" FontSize="12" IsVisible="{Binding IsReplying}"/>
                 <Label Text="{Binding ForwardText}" TextColor="#3b82f6" FontSize="12" IsVisible="{Binding IsForwarding}" FontAttributes="Bold"/>
                 <StackLayout Orientation="Horizontal" IsVisible="{Binding IsFileAttached}">
-                    <Label Text="📄 Attached: " TextColor="Black" FontAttributes="Bold"/>
+                    <Label Text="📎 Attached: " TextColor="Black" FontAttributes="Bold"/>
                     <Label Text="{Binding AttachedFileName}" TextColor="Black"/>
                 </StackLayout>
                 <ProgressBar Progress="{Binding UploadProgress}" IsVisible="{Binding IsUploading}" WidthRequest="200" Margin="0,5"/>
             </VerticalStackLayout>
-            <Button Grid.Column="1" Text="X" BackgroundColor="Transparent" TextColor="Red" Clicked="OnCancelPreview" Padding="0"/>
+            <Button Grid.Column="1" Text="✕" BackgroundColor="Transparent" TextColor="Red" Clicked="OnCancelPreview" Padding="0"/>
         </Grid>
 
         <Grid Grid.Row="2" ColumnDefinitions="Auto,*,Auto" Padding="10" BackgroundColor="{Binding InputBgColor}" IsVisible="{Binding CanSend}">
@@ -183,7 +177,6 @@
             <Button Grid.Column="2" Text="➤" BackgroundColor="#3b82f6" TextColor="White" WidthRequest="50" HeightRequest="50" CornerRadius="25" Clicked="OnSendClicked"/>
         </Grid>
 
-        <!-- READ ONLY LABEL -->
         <Label Grid.Row="2" Text="You cannot send messages in this channel." TextColor="Gray" HorizontalOptions="Center" VerticalOptions="Center" IsVisible="{Binding IsReadOnlyChannel}" Padding="15"/>
     </Grid>
 </ContentView>

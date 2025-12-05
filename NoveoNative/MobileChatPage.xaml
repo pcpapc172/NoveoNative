@@ -2,7 +2,24 @@
 <ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:NoveoNative"
-             x:Class="NoveoNative.MobileChatPage">
-    <!-- This simply wraps the ChatView -->
-    <local:ChatView x:Name="MainChatView"/>
+             x:Class="NoveoNative.MobileChatPage"
+             NavigationPage.HasNavigationBar="False"
+             Shell.NavBarIsVisible="False"
+             BackgroundColor="#111827">
+
+    <Grid RowDefinitions="Auto,*">
+        <!-- Custom Header -->
+        <Border Grid.Row="0" BackgroundColor="#1f2937" Padding="10" StrokeThickness="0">
+            <Grid ColumnDefinitions="Auto,*">
+                <Button Grid.Column="0" Text="←" BackgroundColor="Transparent" 
+                        TextColor="White" FontSize="24" 
+                        Clicked="OnBackClicked" WidthRequest="40" HeightRequest="40"/>
+                <Label Grid.Column="1" Text="{Binding Source={x:Reference MainChatView}, Path=BindingContext.ChatName}" 
+                       TextColor="White" FontSize="18" FontAttributes="Bold" 
+                       VerticalOptions="Center" Margin="10,0,0,0"/>
+            </Grid>
+        </Border>
+
+        <local:ChatView x:Name="MainChatView" Grid.Row="1"/>
+    </Grid>
 </ContentPage>

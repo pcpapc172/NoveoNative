@@ -3,16 +3,12 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
              xmlns:local="clr-namespace:NoveoNative"
              x:Class="NoveoNative.ChatListPage"
-             Title="Noveo"
-             BackgroundColor="{Binding MainBgColor}">
+             BackgroundColor="{Binding MainBgColor}"
+             NavigationPage.HasNavigationBar="False"
+             Shell.NavBarIsVisible="False">
 
-    <ContentPage.ToolbarItems>
-        <ToolbarItem Text="+" Clicked="OnCreateChannel"/>
-        <ToolbarItem Text="⚙" Clicked="OnSettingsClicked"/>
-        <ToolbarItem Text="🌙" Clicked="OnToggleTheme"/>
-    </ContentPage.ToolbarItems>
+    <Grid RowDefinitions="*">
 
-    <Grid>
         <!-- LOGIN OVERLAY -->
         <Grid x:Name="LoginOverlay" BackgroundColor="{Binding MainBgColor}" ZIndex="999" IsVisible="{Binding IsLoginVisible}" InputTransparent="False">
             <Grid.GestureRecognizers>
@@ -38,6 +34,44 @@
             <!-- LEFT: LIST -->
             <Grid Grid.Column="0" BackgroundColor="{Binding MainBgColor}">
                 <Grid RowDefinitions="Auto, *">
+
+                    <!-- CUSTOM HEADER WITH HAMBURGER MENU -->
+                    <Border Grid.Row="0" BackgroundColor="{Binding MainBgColor}" Padding="10,10" StrokeThickness="0">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+
+                            <!-- Hamburger Menu Button -->
+                            <Button Grid.Column="0" 
+                                    Text="☰" 
+                                    BackgroundColor="Transparent" 
+                                    TextColor="{Binding TextColor}" 
+                                    FontSize="28" 
+                                    Padding="8"
+                                    Clicked="OnMenuClicked"
+                                    WidthRequest="50" 
+                                    HeightRequest="50"/>
+
+                            <!-- Title -->
+                            <Label Grid.Column="1" 
+                                   Text="Noveo" 
+                                   FontSize="22" 
+                                   FontAttributes="Bold" 
+                                   TextColor="#3b82f6" 
+                                   VerticalOptions="Center" 
+                                   HorizontalOptions="Start"
+                                   Margin="10,0,0,0"/>
+
+                            <!-- Create Channel Button -->
+                            <Button Grid.Column="2" 
+                                    Text="+" 
+                                    BackgroundColor="Transparent" 
+                                    TextColor="{Binding TextColor}" 
+                                    FontSize="24" 
+                                    Clicked="OnCreateChannel" 
+                                    WidthRequest="50" 
+                                    HeightRequest="50"/>
+                        </Grid>
+                    </Border>
+
                     <Label Grid.Row="1" Text="No active chats." TextColor="Gray" HorizontalOptions="Center" VerticalOptions="Center" IsVisible="{Binding IsListEmpty}"/>
 
                     <CollectionView x:Name="ChatListCollectionView" Grid.Row="1" SelectionMode="Single" SelectionChanged="OnChatSelected">
@@ -84,5 +118,64 @@
             <!-- RIGHT: CHAT -->
             <local:ChatView x:Name="DesktopChatView" Grid.Column="1" IsVisible="{Binding IsDesktop}"/>
         </Grid>
+
+        <!-- HAMBURGER MENU DRAWER (Overlay) -->
+        <Border x:Name="MenuDrawer"
+                Grid.Row="0"
+                BackgroundColor="{Binding MainBgColor}"
+                StrokeThickness="0"
+                Margin="0"
+                Padding="0"
+                IsVisible="False"
+                ZIndex="100"
+                WidthRequest="250"
+                HorizontalOptions="Start"
+                VerticalOptions="Fill">
+            <VerticalStackLayout Spacing="0" Padding="0">
+                <!-- Menu Header -->
+                <Border BackgroundColor="#3b82f6" Padding="20,15" StrokeThickness="0">
+                    <Label Text="Menu" TextColor="White" FontSize="18" FontAttributes="Bold"/>
+                </Border>
+
+                <!-- Menu Items -->
+                <VerticalStackLayout Spacing="0" Padding="0">
+
+                    <!-- Dark Mode Toggle -->
+                    <Border Padding="20,15" StrokeThickness="0" BackgroundColor="{Binding MainBgColor}">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0" Text="Dark Mode" TextColor="{Binding TextColor}" FontSize="16" VerticalOptions="Center"/>
+                            <Switch Grid.Column="1" x:Name="ThemeSwitch" IsToggled="{x:Static local:SettingsManager.IsDarkMode}" Toggled="OnToggleTheme" OnColor="#3b82f6"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Settings -->
+                    <Border Padding="20,15" StrokeThickness="1" BackgroundColor="{Binding MainBgColor}">
+
+                        <Grid ColumnDefinitions="*,Auto">
+                            <Label Grid.Column="0" Text="Settings" TextColor="{Binding TextColor}" FontSize="16" VerticalOptions="Center"/>
+                            <Button Grid.Column="1" Text="→" BackgroundColor="Transparent" TextColor="#3b82f6" FontSize="20" Padding="0" WidthRequest="40" HeightRequest="40" Clicked="OnSettingsClicked"/>
+                        </Grid>
+                    </Border>
+
+                    <!-- Logout -->
+                    <Border Padding="20,15" StrokeThickness="1" BackgroundColor="{Binding MainBgColor}">
+
+                        <Button Text="Logout" BackgroundColor="#ef4444" TextColor="White" Clicked="OnLogout"/>
+                    </Border>
+                </VerticalStackLayout>
+            </VerticalStackLayout>
+        </Border>
+
+        <!-- Menu Backdrop (Tap to close) -->
+        <BoxView x:Name="MenuBackdrop" 
+                 Color="Black" 
+                 Opacity="0.5" 
+                 IsVisible="False" 
+                 ZIndex="99">
+            <BoxView.GestureRecognizers>
+                <TapGestureRecognizer Tapped="OnMenuBackdropTapped"/>
+            </BoxView.GestureRecognizers>
+        </BoxView>
+
     </Grid>
 </ContentPage>

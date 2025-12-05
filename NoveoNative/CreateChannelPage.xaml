@@ -1,44 +1,105 @@
 <?xml version="1.0" encoding="utf-8" ?>
-<ContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
+<local:BaseContentPage xmlns="http://schemas.microsoft.com/dotnet/2021/maui"
              xmlns:x="http://schemas.microsoft.com/winfx/2009/xaml"
+             xmlns:local="clr-namespace:NoveoNative"
              x:Class="NoveoNative.CreateChannelPage"
              x:Name="ThisPage"
-             Title="Create Channel"
-             BackgroundColor="White">
+             BackgroundColor="{Binding PageBgColor}"
+             NavigationPage.HasNavigationBar="False"
+             Shell.NavBarIsVisible="False">
 
-    <ScrollView>
-        <VerticalStackLayout Padding="20" Spacing="20">
-            <Label Text="Create a New Channel" FontSize="24" FontAttributes="Bold" TextColor="#3b82f6"/>
+    <Grid RowDefinitions="Auto,*" BackgroundColor="{Binding PageBgColor}">
 
-            <!-- Avatar Preview -->
-            <Border StrokeShape="RoundRectangle 20" HeightRequest="120" WidthRequest="120" HorizontalOptions="Center" BackgroundColor="LightGray">
-                <Grid>
-                    <Label Text="#" FontSize="48" TextColor="White" HorizontalOptions="Center" VerticalOptions="Center" IsVisible="{Binding ShowDefaultAvatar}"/>
-                    <Image x:Name="AvatarPreview" Aspect="AspectFill" IsVisible="{Binding HasSelectedAvatar}"/>
-                </Grid>
-            </Border>
+        <!-- Custom Header -->
+        <Border Grid.Row="0" BackgroundColor="{Binding CardBgColor}" Padding="15,10" StrokeThickness="0">
+            <Grid ColumnDefinitions="Auto,*">
+                <Button Grid.Column="0" Text="←" BackgroundColor="Transparent" 
+                        TextColor="{Binding PageTextColor}" FontSize="24" 
+                        Clicked="OnClose" WidthRequest="40" HeightRequest="40"/>
+                <Label Grid.Column="1" Text="Create Channel" FontSize="20" FontAttributes="Bold"
+                       TextColor="{Binding PageTextColor}" VerticalOptions="Center" Margin="10,0,0,0"/>
+            </Grid>
+        </Border>
 
-            <Button Text="Choose Channel Avatar" Clicked="OnSelectAvatar" BackgroundColor="#3b82f6" TextColor="White"/>
+        <ScrollView Grid.Row="1" Padding="20">
+            <VerticalStackLayout Spacing="20">
 
-            <!-- Channel Name -->
-            <Label Text="Channel Name" FontAttributes="Bold" TextColor="Black"/>
-            <Entry x:Name="ChannelNameEntry" Placeholder="e.g., Tech News" TextColor="Black"/>
+                <!-- Avatar Preview -->
+                <Border StrokeShape="RoundRectangle 60" 
+                        HeightRequest="120" WidthRequest="120" 
+                        HorizontalOptions="Center" 
+                        BackgroundColor="{Binding InputBgColor}"
+                        Stroke="{Binding BorderColor}"
+                        StrokeThickness="2">
+                    <Grid>
+                        <Label Text="#" FontSize="48" TextColor="{Binding PlaceholderColor}" 
+                               HorizontalOptions="Center" VerticalOptions="Center" 
+                               IsVisible="{Binding ShowDefaultAvatar}"/>
+                        <Image x:Name="AvatarPreview" Aspect="AspectFill" IsVisible="{Binding HasSelectedAvatar}"/>
+                    </Grid>
+                </Border>
 
-            <!-- Channel Handle -->
-            <Label Text="Channel Handle" FontAttributes="Bold" TextColor="Black"/>
-            <HorizontalStackLayout Spacing="5">
-                <Label Text="@" FontSize="18" TextColor="Gray" VerticalOptions="Center"/>
-                <Entry x:Name="HandleEntry" Placeholder="technews" TextColor="Black" HorizontalOptions="FillAndExpand"/>
-            </HorizontalStackLayout>
-            <Label Text="Only letters, numbers, and underscores" FontSize="12" TextColor="Gray"/>
+                <Button Text="Choose Channel Avatar" 
+                        Clicked="OnSelectAvatar" 
+                        BackgroundColor="#3b82f6" 
+                        TextColor="White"/>
 
-            <!-- Description -->
-            <Label Text="Description (Optional)" FontAttributes="Bold" TextColor="Black"/>
-            <Editor x:Name="DescriptionEditor" Placeholder="What's this channel about?" TextColor="Black" HeightRequest="100"/>
+                <!-- Channel Name -->
+                <Border BackgroundColor="{Binding CardBgColor}"
+                        StrokeThickness="1" Stroke="{Binding BorderColor}"
+                        Padding="15" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Channel Name" FontAttributes="Bold" TextColor="{Binding PageTextColor}"/>
+                        <Border StrokeShape="RoundRectangle 8" 
+                                Stroke="{Binding BorderColor}" 
+                                Padding="10,5" 
+                                BackgroundColor="{Binding InputBgColor}">
+                            <Entry x:Name="ChannelNameEntry" 
+                                   Placeholder="e.g., Tech News" 
+                                   BackgroundColor="Transparent"
+                                   TextColor="{Binding PageTextColor}"
+                                   PlaceholderColor="{Binding PlaceholderColor}"/>
+                        </Border>
+                    </VerticalStackLayout>
+                </Border>
 
-            <Label x:Name="StatusLabel" TextColor="Red" HorizontalOptions="Center" IsVisible="False"/>
+                <!-- Channel Handle -->
+                <Border BackgroundColor="{Binding CardBgColor}"
+                        StrokeThickness="1" Stroke="{Binding BorderColor}"
+                        Padding="15" StrokeShape="RoundRectangle 12">
+                    <VerticalStackLayout Spacing="10">
+                        <Label Text="Channel Handle" FontAttributes="Bold" TextColor="{Binding PageTextColor}"/>
+                        <Border StrokeShape="RoundRectangle 8" 
+                                Stroke="{Binding BorderColor}" 
+                                Padding="0" 
+                                BackgroundColor="{Binding InputBgColor}">
+                            <HorizontalStackLayout Spacing="0">
+                                <Label Text="@" FontSize="16" TextColor="{Binding PlaceholderColor}" 
+                                       VerticalOptions="Center" Padding="10,0,5,0"/>
+                                <Entry x:Name="HandleEntry" 
+                                       Placeholder="technews" 
+                                       BackgroundColor="Transparent"
+                                       TextColor="{Binding PageTextColor}"
+                                       PlaceholderColor="{Binding PlaceholderColor}"
+                                       HorizontalOptions="FillAndExpand"/>
+                            </HorizontalStackLayout>
+                        </Border>
+                        <Label Text="Only letters, numbers, and underscores" 
+                               FontSize="12" TextColor="{Binding PlaceholderColor}"/>
+                    </VerticalStackLayout>
+                </Border>
 
-            <Button Text="Create Channel" BackgroundColor="#22c55e" TextColor="White" Clicked="OnCreateChannel"/>
-        </VerticalStackLayout>
-    </ScrollView>
-</ContentPage>
+                <Label x:Name="StatusLabel" 
+                       TextColor="Red" 
+                       HorizontalOptions="Center" 
+                       IsVisible="False"/>
+
+                <Button Text="Create Channel" 
+                        BackgroundColor="#22c55e" 
+                        TextColor="White" 
+                        Clicked="OnCreateChannel"
+                        Margin="0,10,0,0"/>
+            </VerticalStackLayout>
+        </ScrollView>
+    </Grid>
+</local:BaseContentPage>
