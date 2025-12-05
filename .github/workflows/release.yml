@@ -54,7 +54,7 @@ jobs:
 
   # 3. BUILD iOS (UNSIGNED)
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-26  # ✅ Use Tahoe with Xcode 26
     steps:
       - uses: actions/checkout@v4
       - name: Setup .NET 9.0
@@ -71,6 +71,7 @@ jobs:
         with:
           name: iOS-IPA-Unsigned
           path: ios_output/*.ipa
+
 
   # 4. CREATE RELEASE
   create-release:
@@ -114,7 +115,7 @@ jobs:
   # 5. SIGN iOS IPA & DEPLOY
   sign-and-deploy:
     needs: create-release
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout gh-pages
         uses: actions/checkout@v4
