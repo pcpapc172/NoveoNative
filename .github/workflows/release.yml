@@ -54,7 +54,7 @@ jobs:
 
   # 3. BUILD iOS (UNSIGNED)
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - name: Setup .NET 9.0
@@ -62,15 +62,17 @@ jobs:
         with:
           dotnet-version: 9.0.x
       - name: Install MAUI Workload
-        run: dotnet workload install maui-ios
+        run: dotnet workload install maui  # ✅ Changed from maui-ios
       - name: Publish IPA
         run: |
-          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:TargetFrameworks=net9.0-ios -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision="" -o ./ios_output
+          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision=""
       - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
           name: iOS-IPA-Unsigned
-          path: ios_output/*.ipa
+          path: '**/*.ipa'  # ✅ Changed to wildcard
+
+
 
   # 4. CREATE RELEASE
   create-release:
@@ -114,7 +116,7 @@ jobs:
   # 5. SIGN iOS IPA & DEPLOY
   sign-and-deploy:
     needs: create-release
-    runs-on: macos-latest
+    runs-on: macos-26
     steps:
       - name: Checkout gh-pages
         uses: actions/checkout@v4
