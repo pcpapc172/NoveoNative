@@ -1,4 +1,4 @@
-name: Create Release
+name: Build, Release, Sign & Deploy
 
 on:
   push:
@@ -21,7 +21,6 @@ jobs:
       - name: Install MAUI Workload
         run: dotnet workload install maui-android
       - name: Publish APK
-        # Includes fixes for resources and trimming
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false -p:RunAOTCompilation=false -p:AndroidLinkMode=None -p:PublishTrimmed=false -p:SatelliteResourceLanguages="en"
       - name: Upload APK Artifact
@@ -42,25 +41,20 @@ jobs:
       - name: Install MAUI Workload
         run: dotnet workload install maui-windows
       - name: Publish Windows
-        # Includes fixes for platform targeting
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release -p:TargetFrameworks=net9.0-windows10.0.19041.0 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false --self-contained true
-      
       - name: Zip Windows Build
         run: |
           powershell Compress-Archive -Path NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/* -DestinationPath NoveoWindows.zip
-      
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Windows-Zip
           path: NoveoWindows.zip
 
-  # 3. BUILD iOS
+  # 3. BUILD iOS (UNSIGNED)
   build-ios:
-    # Set to macos-26 as requested. 
-    # If this fails with "Runner not found", GitHub hasn't added the label yet -> switch to 'macos-latest'
-    runs-on: macos-26
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       - name: Setup .NET 9.0
@@ -70,20 +64,26 @@ jobs:
       - name: Install MAUI Workload
         run: dotnet workload install maui-ios
       - name: Publish IPA
-        # Uses Ad-Hoc signing (-) and Suppresses Version Check to fix the .NET 9 bug
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:TargetFrameworks=net9.0-ios -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision="" -o ./ios_output
       - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: iOS-IPA
+          name: iOS-IPA-Unsigned
           path: ios_output/*.ipa
 
-  # 4. PUBLISH RELEASE
+  # 4. CREATE RELEASE
   create-release:
     needs: [build-android, build-windows, build-ios]
     runs-on: ubuntu-latest
+    outputs:
+      release_id: ${{ steps.create_release.outputs.id }}
+      tag_name: ${{ steps.get_tag.outputs.tag }}
     steps:
+      - name: Get tag name
+        id: get_tag
+        run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        
       - name: Download Android Artifact
         uses: actions/download-artifact@v4
         with:
@@ -94,12 +94,13 @@ jobs:
         with:
           name: Windows-Zip
           
-      - name: Download iOS Artifact
+      - name: Download iOS Artifact (Unsigned)
         uses: actions/download-artifact@v4
         with:
-          name: iOS-IPA
+          name: iOS-IPA-Unsigned
 
       - name: Create Release
+        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           files: |
@@ -109,3 +110,138 @@ jobs:
           generate_release_notes: true
           draft: false
           prerelease: false
+
+  # 5. SIGN iOS IPA & DEPLOY
+  sign-and-deploy:
+    needs: create-release
+    runs-on: macos-latest
+    steps:
+      - name: Checkout gh-pages
+        uses: actions/checkout@v4
+        with:
+          repository: pcpapc172/noveo-native-install
+          ref: gh-pages
+          token: ${{ secrets.DEPLOY_TOKEN }}
+          
+      - name: Download Unsigned IPA
+        uses: actions/download-artifact@v4
+        with:
+          name: iOS-IPA-Unsigned
+          
+      - name: Rename IPA
+        run: mv *.ipa unsigned.ipa
+          
+      - name: Build Zsign
+        run: |
+          echo "📦 Building Zsign..."
+          brew install pkg-config openssl minizip
+          git clone https://github.com/zhlynn/zsign.git
+          cd zsign/build/macos
+          make clean && make
+          sudo cp ../../bin/zsign /usr/local/bin/
+          cd ../../..
+          rm -rf zsign
+          
+      - name: Setup Certificate & Profile
+        run: |
+          echo "${{ secrets.P12_CERTIFICATE }}" | base64 --decode > certificate.p12
+          echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
+          
+      - name: Sign IPA with Zsign
+        id: sign
+        run: |
+          echo "✍️ Signing IPA..."
+          /usr/local/bin/zsign -k certificate.p12 -p "${{ secrets.P12_PASSWORD }}" \
+            -m profile.mobileprovision -o NoveoNative.ipa unsigned.ipa
+          
+          SIZE=$(stat -f%z NoveoNative.ipa)
+          echo "ipa_size=$SIZE" >> $GITHUB_OUTPUT
+          
+          # Extract Bundle ID
+          unzip -q NoveoNative.ipa -d temp_extract
+          APP_PATH=$(find temp_extract/Payload -name "*.app" -type d -depth 1 | head -1)
+          BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw "$APP_PATH/Info.plist" 2>/dev/null || echo "com.etisalat.INDY")
+          rm -rf temp_extract
+          
+          echo "bundle_id=$BUNDLE_ID" >> $GITHUB_OUTPUT
+          rm -f certificate.p12 profile.mobileprovision unsigned.ipa
+          
+      - name: Update manifest.plist
+        run: |
+          cat > manifest.plist << EOF
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+              <key>items</key>
+              <array>
+                  <dict>
+                      <key>assets</key>
+                      <array>
+                          <dict>
+                              <key>kind</key>
+                              <string>software-package</string>
+                              <key>url</key>
+                              <string>https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa</string>
+                          </dict>
+                      </array>
+                      <key>metadata</key>
+                      <dict>
+                          <key>bundle-identifier</key>
+                          <string>${{ steps.sign.outputs.bundle_id }}</string>
+                          <key>bundle-version</key>
+                          <string>${{ needs.create-release.outputs.tag_name }}</string>
+                          <key>kind</key>
+                          <string>software</string>
+                          <key>title</key>
+                          <string>NoveoNative</string>
+                      </dict>
+                  </dict>
+              </array>
+          </dict>
+          </plist>
+          EOF
+          
+      - name: Update apps.json
+        run: |
+          cat > apps.json << EOF
+          {
+            "name": "NoveoNative Repository",
+            "identifier": "com.noveo.repo",
+            "sourceURL": "https://pcpapc172.github.io/noveo-native-install/apps.json",
+            "apps": [
+              {
+                "name": "NoveoNative",
+                "bundleIdentifier": "${{ steps.sign.outputs.bundle_id }}",
+                "developerName": "PCPA",
+                "subtitle": "Modern Messenger for iOS",
+                "version": "${{ needs.create-release.outputs.tag_name }}",
+                "versionDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+                "versionDescription": "Latest release",
+                "downloadURL": "https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa",
+                "localizedDescription": "Modern messaging app",
+                "iconURL": "https://pcpapc172.github.io/noveo-native-install/assets/icon512.png",
+                "tintColor": "#3b82f6",
+                "size": ${{ steps.sign.outputs.ipa_size }}
+              }
+            ]
+          }
+          EOF
+          
+      - name: Save version
+        run: echo "${{ needs.create-release.outputs.tag_name }}" > version.txt
+          
+      - name: Commit and push
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .
+          git commit -m "🚀 Deploy ${{ needs.create-release.outputs.tag_name }}"
+          git push origin gh-pages
+          
+      - name: Summary
+        run: |
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version:** ${{ needs.create-release.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bundle ID:** ${{ steps.sign.outputs.bundle_id }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Install:** https://pcpapc172.github.io/noveo-native-install/" >> $GITHUB_STEP_SUMMARY
