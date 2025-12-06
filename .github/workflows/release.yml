@@ -9,24 +9,78 @@ permissions:
   contents: write
 
 jobs:
-  # 1. BUILD ANDROID
+  # 1. BUILD ANDROID (MULTIPLE ARCHITECTURES)
   build-android:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        abi: [arm64-v8a, armeabi-v7a, x86, x86_64]
     steps:
       - uses: actions/checkout@v4
+      
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
+      
       - name: Install MAUI Workload
         run: dotnet workload install maui-android
-      - name: Publish APK
+      
+      - name: Publish APK for ${{ matrix.abi }}
         run: |
-          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release -p:TargetFrameworks=net9.0-android -p:AndroidPackageFormat=apk -p:AndroidKeyStore=false -p:RunAOTCompilation=false -p:AndroidLinkMode=None -p:PublishTrimmed=false -p:SatelliteResourceLanguages="en"
+          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release `
+            -p:TargetFrameworks=net9.0-android `
+            -p:AndroidPackageFormat=apk `
+            -p:AndroidKeyStore=false `
+            -p:RunAOTCompilation=false `
+            -p:AndroidLinkMode=None `
+            -p:PublishTrimmed=false `
+            -p:SatelliteResourceLanguages="en" `
+            -p:AndroidUseAapt2=true `
+            -p:AndroidSupportedAbis=${{ matrix.abi }} `
+            -p:AndroidCreatePackagePerAbi=true
+      
+      - name: Align & Sign APK
+        run: |
+          # Find the APK
+          $APK = Get-ChildItem -Path "NoveoNative/bin/Release/net9.0-android/publish/" -Filter "*.apk" | Select-Object -First 1
+          
+          if ($null -eq $APK) {
+            Write-Host "❌ APK not found for ${{ matrix.abi }}!"
+            exit 1
+          }
+          
+          $APK_NAME = $APK.BaseName
+          $APK_PATH = $APK.FullName
+          
+          Write-Host "✅ Found APK: $APK_NAME"
+          Write-Host "📦 Architecture: ${{ matrix.abi }}"
+          
+          # Align APK
+          $ANDROID_HOME = "C:\Users\${{ env:USERNAME }}\AppData\Local\Android\sdk"
+          $ZIPALIGN = "$ANDROID_HOME\build-tools\34.0.0\zipalign.exe"
+          
+          if (-not (Test-Path $ZIPALIGN)) {
+            Write-Host "⚠️ zipalign not found, trying alternative path..."
+            $ZIPALIGN = "$ANDROID_HOME\build-tools\35.0.0\zipalign.exe"
+          }
+          
+          & $ZIPALIGN -v 4 "$APK_PATH" "aligned.apk"
+          
+          # Create architecture-specific name
+          $ABI_SHORT = "${{ matrix.abi }}" -replace "-v8a", "" -replace "armeabi-", "" -replace "x86_64", "x64"
+          $SIGNED_APK = "com.companyname.noveonative-$ABI_SHORT-signed.apk"
+          
+          Remove-Item "$APK_PATH"
+          Rename-Item "aligned.apk" "$SIGNED_APK"
+          
+          Write-Host "✅ APK aligned and renamed: $SIGNED_APK"
+          Copy-Item "$SIGNED_APK" "NoveoNative/bin/Release/net9.0-android/publish/"
+      
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Android-APK
+          name: Android-APK-${{ matrix.abi }}
           path: NoveoNative/bin/Release/net9.0-android/publish/*.apk
 
   # 2. BUILD WINDOWS
@@ -34,18 +88,23 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+      
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
+      
       - name: Install MAUI Workload
         run: dotnet workload install maui-windows
+      
       - name: Publish Windows
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release -p:TargetFrameworks=net9.0-windows10.0.19041.0 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false --self-contained true
+      
       - name: Zip Windows Build
         run: |
           powershell Compress-Archive -Path NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/* -DestinationPath NoveoWindows.zip
+      
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
@@ -57,83 +116,89 @@ jobs:
     runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
+      
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
+      
       - name: Install MAUI Workload
-        run: dotnet workload install maui  # ✅ Changed from maui-ios
-      - name: Publish IPA
+        run: dotnet workload install maui
+      
+      - name: Publish iOS IPA
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision=""
-      - name: Upload iOS Artifact
+      
+      - name: Upload iOS Artifact (Unsigned)
         uses: actions/upload-artifact@v4
         with:
           name: iOS-IPA-Unsigned
-          path: '**/*.ipa'  # ✅ Changed to wildcard
-
-
+          path: '**/*.ipa'
 
   # 4. CREATE RELEASE
   create-release:
     needs: [build-android, build-windows, build-ios]
     runs-on: ubuntu-latest
     outputs:
-      release_id: ${{ steps.create_release.outputs.id }}
       tag_name: ${{ steps.get_tag.outputs.tag }}
     steps:
       - name: Get tag name
         id: get_tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-        
-      - name: Download Android Artifact
+      
+      - name: Download all Android APKs
         uses: actions/download-artifact@v4
         with:
-          name: Android-APK
-          
+          path: artifacts
+      
       - name: Download Windows Artifact
         uses: actions/download-artifact@v4
         with:
           name: Windows-Zip
-          
+          path: artifacts
+      
       - name: Download iOS Artifact (Unsigned)
         uses: actions/download-artifact@v4
         with:
           name: iOS-IPA-Unsigned
-          
-      - name: List downloaded files
+          path: artifacts
+      
+      - name: Organize files for release
         run: |
-          echo "📂 Files in current directory:"
-          ls -la
-          echo "📂 Looking for IPA files:"
-          find . -name "*.ipa" -type f
+          echo "📂 Organizing artifacts..."
+          cd artifacts
           
-      - name: Move IPA to root
-        run: |
-          if [ -f *.ipa ]; then
-            echo "IPA found in root"
-          else
-            echo "Searching for IPA..."
-            IPA_PATH=$(find . -name "*.ipa" -type f | head -1)
-            if [ -n "$IPA_PATH" ]; then
-              cp "$IPA_PATH" ./
-              echo "IPA copied to root"
-            fi
+          # Find and organize APKs
+          find . -name "*.apk" -type f | while read apk; do
+            echo "Found APK: $apk"
+            cp "$apk" ./
+          done
+          
+          # Find and organize IPA
+          IPA=$(find . -name "*.ipa" -type f | head -1)
+          if [ -n "$IPA" ]; then
+            echo "✅ Found IPA: $IPA"
+            cp "$IPA" ./NoveoNative-unsigned.ipa
           fi
-          ls -la *.ipa
-
+          
+          # Find and organize Windows ZIP
+          if [ -f "Windows-Zip/NoveoWindows.zip" ]; then
+            cp "Windows-Zip/NoveoWindows.zip" ./
+          fi
+          
+          echo "📋 Files ready for release:"
+          ls -la *.apk *.ipa *.zip 2>/dev/null || true
+      
       - name: Create Release
-        id: create_release
         uses: softprops/action-gh-release@v1
         with:
           files: |
-            *.apk
-            *.ipa
-            NoveoWindows.zip
+            artifacts/*.apk
+            artifacts/NoveoNative-unsigned.ipa
+            artifacts/NoveoWindows.zip
           generate_release_notes: true
           draft: false
           prerelease: false
-
 
   # 5. SIGN iOS IPA & DEPLOY
   sign-and-deploy:
@@ -146,15 +211,29 @@ jobs:
           repository: pcpapc172/noveo-native-install
           ref: gh-pages
           token: ${{ secrets.DEPLOY_TOKEN }}
-          
+      
       - name: Download Unsigned IPA
         uses: actions/download-artifact@v4
         with:
           name: iOS-IPA-Unsigned
+          path: ./ipa-download
+      
+      - name: Find and Move IPA
+        run: |
+          echo "📂 Finding IPA..."
+          find ./ipa-download -name "*.ipa" -type f
           
-      - name: Rename IPA
-        run: mv *.ipa unsigned.ipa
+          IPA_FILE=$(find ./ipa-download -name "*.ipa" -type f | head -1)
           
+          if [ -z "$IPA_FILE" ]; then
+            echo "❌ No IPA found!"
+            exit 1
+          fi
+          
+          echo "✅ Found: $IPA_FILE"
+          mv "$IPA_FILE" unsigned.ipa
+          ls -la
+      
       - name: Build Zsign
         run: |
           echo "📦 Building Zsign..."
@@ -165,18 +244,28 @@ jobs:
           sudo cp ../../bin/zsign /usr/local/bin/
           cd ../../..
           rm -rf zsign
-          
+      
       - name: Setup Certificate & Profile
         run: |
+          echo "🔐 Setting up certificate and profile..."
           echo "${{ secrets.P12_CERTIFICATE }}" | base64 --decode > certificate.p12
           echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
           
+          echo "📋 Files created:"
+          ls -lah certificate.p12 profile.mobileprovision
+      
       - name: Sign IPA with Zsign
         id: sign
         run: |
           echo "✍️ Signing IPA..."
+          
           /usr/local/bin/zsign -k certificate.p12 -p "${{ secrets.P12_PASSWORD }}" \
             -m profile.mobileprovision -o NoveoNative.ipa unsigned.ipa
+          
+          if [ ! -f NoveoNative.ipa ]; then
+            echo "❌ Signing failed"
+            exit 1
+          fi
           
           SIZE=$(stat -f%z NoveoNative.ipa)
           echo "ipa_size=$SIZE" >> $GITHUB_OUTPUT
@@ -189,7 +278,7 @@ jobs:
           
           echo "bundle_id=$BUNDLE_ID" >> $GITHUB_OUTPUT
           rm -f certificate.p12 profile.mobileprovision unsigned.ipa
-          
+      
       - name: Update manifest.plist
         run: |
           cat > manifest.plist << EOF
@@ -225,7 +314,7 @@ jobs:
           </dict>
           </plist>
           EOF
-          
+      
       - name: Update apps.json
         run: |
           cat > apps.json << EOF
@@ -251,10 +340,10 @@ jobs:
             ]
           }
           EOF
-          
+      
       - name: Save version
         run: echo "${{ needs.create-release.outputs.tag_name }}" > version.txt
-          
+      
       - name: Commit and push
         run: |
           git config user.name "github-actions[bot]"
@@ -262,7 +351,7 @@ jobs:
           git add .
           git commit -m "🚀 Deploy ${{ needs.create-release.outputs.tag_name }}"
           git push origin gh-pages
-          
+      
       - name: Summary
         run: |
           echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
