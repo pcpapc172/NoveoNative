@@ -87,81 +87,37 @@ jobs:
           name: Windows-${{ matrix.arch }}
           path: NoveoNative-Windows-${{ matrix.arch }}.zip
 
-  # 3. BUILD LINUX (FIXED)
-  build-linux:
-    runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x64, arm64]
+  # 3. BUILD macOS (NEW)
+  build-macos:
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
+      - run: dotnet workload install maui
       
-      # Only install maui-android (needed for restore, but we won't build it)
-      - run: dotnet workload install maui-android
-      
-      - name: Install dependencies
+      - name: Publish MacCatalyst
         run: |
-          sudo apt-get update
-          sudo apt-get install -y libfuse2 libssl3
-          if [ "${{ matrix.arch }}" == "arm64" ]; then
-            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
-          fi
-
-      - name: Publish Linux (Force Single Framework)
+          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-maccatalyst -c Release \
+            -p:CreatePackage=false \
+            -p:RuntimeIdentifier=maccatalyst-arm64 \
+            -p:CodesignKey="-" \
+            -p:CodesignProvision=""
+            
+      - name: Zip Application
         run: |
-          # CRITICAL FIX: -p:TargetFrameworks=net9.0 prevents looking for iOS/Android workloads
-          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0 -c Release \
-            -p:TargetFrameworks=net9.0 \
-            -p:RuntimeIdentifier=linux-${{ matrix.arch }} \
-            -p:PublishSingleFile=true \
-            -p:SelfContained=true \
-            -o ./linux-publish-${{ matrix.arch }}
-
-      - name: Create AppImage
-        run: |
-          ARCH_NAME="${{ matrix.arch }}"
-          [ "$ARCH_NAME" == "x64" ] && ARCH_APPIMAGE="x86_64" || ARCH_APPIMAGE="aarch64"
+          cd NoveoNative/bin/Release/net9.0-maccatalyst/maccatalyst-arm64/publish
+          zip -r NoveoNative-macOS-arm64.zip NoveoNative.app
           
-          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/512x512/apps
-          cp linux-publish-${{ matrix.arch }}/NoveoNative AppDir/usr/bin/
-          chmod +x AppDir/usr/bin/NoveoNative
-          
-          cat > AppDir/usr/share/applications/noveonative.desktop << 'EOF'
-          [Desktop Entry]
-          Name=NoveoNative
-          Exec=NoveoNative
-          Type=Application
-          Icon=noveonative
-          Categories=Communication;
-          EOF
-          
-          cat > AppDir/AppRun << 'EOF'
-          #!/bin/bash
-          SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-          export LD_LIBRARY_PATH="$SCRIPT_DIR/usr/lib:$LD_LIBRARY_PATH"
-          exec "$SCRIPT_DIR/usr/bin/NoveoNative" "$@"
-          EOF
-          chmod +x AppDir/AppRun
-          
-          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH_APPIMAGE}.AppImage
-          chmod +x appimagetool-${ARCH_APPIMAGE}.AppImage
-          ARCH=${ARCH_APPIMAGE} ./appimagetool-${ARCH_APPIMAGE}.AppImage --appimage-extract-and-run AppDir NoveoNative-Linux-${{ matrix.arch }}.AppImage
-      
-      - run: cd linux-publish-${{ matrix.arch }} && tar -czf ../NoveoNative-Linux-${{ matrix.arch }}.tar.gz .
-      
       - uses: actions/upload-artifact@v4
         with:
-          name: Linux-${{ matrix.arch }}
-          path: |
-            NoveoNative-Linux-${{ matrix.arch }}.AppImage
-            NoveoNative-Linux-${{ matrix.arch }}.tar.gz
+          name: macOS-App
+          path: NoveoNative/bin/Release/net9.0-maccatalyst/maccatalyst-arm64/publish/NoveoNative-macOS-arm64.zip
 
   # 4. BUILD iOS
   build-ios:
-    runs-on: macos-26 # Xcode 26.0
+    runs-on: macos-26
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v4
@@ -185,7 +141,7 @@ jobs:
 
   # 5. CREATE RELEASE
   create-release:
-    needs: [build-android, build-windows, build-linux, build-ios]
+    needs: [build-android, build-windows, build-macos, build-ios]
     runs-on: ubuntu-latest
     steps:
       - id: get_tag
@@ -196,9 +152,13 @@ jobs:
       - name: Prepare Release
         run: |
           mkdir release_files
-          find artifacts -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.zip" -o -name "*.tar.gz" -o -name "*.AppImage" \) -exec cp {} release_files/ \;
+          # Gather all artifacts
+          find artifacts -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.zip" \) -exec cp {} release_files/ \;
+          
+          # Rename unsigned IPA if found
           IPA=$(find release_files -name "*.ipa" | head -1)
           [ -n "$IPA" ] && mv "$IPA" release_files/NoveoNative-unsigned.ipa || true
+          
       - uses: softprops/action-gh-release@v1
         with:
           files: release_files/*
