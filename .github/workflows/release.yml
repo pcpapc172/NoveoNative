@@ -83,9 +83,12 @@ jobs:
           name: Android-APK-${{ matrix.abi }}
           path: NoveoNative/bin/Release/net9.0-android/publish/*.apk
 
-  # 2. BUILD WINDOWS
+  # 2. BUILD WINDOWS (MULTIPLE ARCHITECTURES)
   build-windows:
     runs-on: windows-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
       
@@ -97,21 +100,122 @@ jobs:
       - name: Install MAUI Workload
         run: dotnet workload install maui-windows
       
-      - name: Publish Windows
+      - name: Publish Windows ${{ matrix.arch }}
         run: |
-          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release -p:TargetFrameworks=net9.0-windows10.0.19041.0 -p:WindowsPackageType=None -p:WindowsAppSDKSelfContained=true -p:PublishSingleFile=false --self-contained true
+          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release `
+            -p:TargetFrameworks=net9.0-windows10.0.19041.0 `
+            -p:WindowsPackageType=None `
+            -p:WindowsAppSDKSelfContained=true `
+            -p:PublishSingleFile=true `
+            -p:RuntimeIdentifier=win-${{ matrix.arch }} `
+            --self-contained true
       
-      - name: Zip Windows Build
+      - name: Zip Windows ${{ matrix.arch }} Build
         run: |
-          powershell Compress-Archive -Path NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-x64/publish/* -DestinationPath NoveoWindows.zip
+          powershell Compress-Archive -Path NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-${{ matrix.arch }}/publish/* -DestinationPath "NoveoNative-Windows-${{ matrix.arch }}.zip"
       
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: Windows-Zip
-          path: NoveoWindows.zip
+          name: Windows-${{ matrix.arch }}
+          path: NoveoNative-Windows-${{ matrix.arch }}.zip
 
-  # 3. BUILD iOS (UNSIGNED)
+  # 3. BUILD LINUX (MULTIPLE ARCHITECTURES)
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+      
+      - name: Setup .NET 9.0
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 9.0.x
+      
+      - name: Install dependencies for ${{ matrix.arch }}
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libfuse2 libssl3
+          
+          if [ "${{ matrix.arch }}" == "arm64" ]; then
+            sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
+          fi
+      
+      - name: Publish Linux ${{ matrix.arch }}
+        run: |
+          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0 -c Release \
+            -p:RuntimeIdentifier=linux-${{ matrix.arch }} \
+            -p:PublishSingleFile=true \
+            -p:SelfContained=true \
+            -o ./linux-publish-${{ matrix.arch }}
+      
+      - name: Create AppImage for ${{ matrix.arch }}
+        run: |
+          ARCH_NAME="${{ matrix.arch }}"
+          if [ "$ARCH_NAME" == "x64" ]; then
+            ARCH_APPIMAGE="x86_64"
+          else
+            ARCH_APPIMAGE="aarch64"
+          fi
+          
+          echo "🎁 Creating AppImage for $ARCH_APPIMAGE..."
+          
+          # Create AppDir structure
+          mkdir -p AppDir/usr/bin
+          mkdir -p AppDir/usr/share/applications
+          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
+          
+          # Copy binary
+          cp linux-publish-${{ matrix.arch }}/NoveoNative AppDir/usr/bin/
+          chmod +x AppDir/usr/bin/NoveoNative
+          
+          # Create desktop file
+          cat > AppDir/usr/share/applications/noveonative.desktop << 'EOF'
+          [Desktop Entry]
+          Name=NoveoNative
+          Comment=Modern Messenger
+          Exec=NoveoNative
+          Type=Application
+          Icon=noveonative
+          Categories=Communication;
+          EOF
+          
+          # Create AppRun script
+          cat > AppDir/AppRun << 'EOF'
+          #!/bin/bash
+          SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+          export LD_LIBRARY_PATH="$SCRIPT_DIR/usr/lib:$LD_LIBRARY_PATH"
+          exec "$SCRIPT_DIR/usr/bin/NoveoNative" "$@"
+          EOF
+          chmod +x AppDir/AppRun
+          
+          # Download appimagetool
+          wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH_APPIMAGE}.AppImage
+          chmod +x appimagetool-${ARCH_APPIMAGE}.AppImage
+          
+          # Create AppImage
+          ./appimagetool-${ARCH_APPIMAGE}.AppImage AppDir NoveoNative-Linux-${{ matrix.arch }}.AppImage
+          
+          echo "✅ AppImage created: NoveoNative-Linux-${{ matrix.arch }}.AppImage"
+          ls -lh NoveoNative-Linux-${{ matrix.arch }}.AppImage
+      
+      - name: Create Linux tarball
+        run: |
+          cd linux-publish-${{ matrix.arch }}
+          tar -czf ../NoveoNative-Linux-${{ matrix.arch }}.tar.gz .
+          cd ..
+      
+      - name: Upload Linux Artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: Linux-${{ matrix.arch }}
+          path: |
+            NoveoNative-Linux-${{ matrix.arch }}.AppImage
+            NoveoNative-Linux-${{ matrix.arch }}.tar.gz
+
+  # 4. BUILD iOS (UNSIGNED)
   build-ios:
     runs-on: macos-26
     steps:
@@ -135,9 +239,9 @@ jobs:
           name: iOS-IPA-Unsigned
           path: '**/*.ipa'
 
-  # 4. CREATE RELEASE
+  # 5. CREATE RELEASE
   create-release:
-    needs: [build-android, build-windows, build-ios]
+    needs: [build-android, build-windows, build-linux, build-ios]
     runs-on: ubuntu-latest
     outputs:
       tag_name: ${{ steps.get_tag.outputs.tag }}
@@ -146,21 +250,9 @@ jobs:
         id: get_tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
       
-      - name: Download all Android APKs
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          path: artifacts
-      
-      - name: Download Windows Artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: Windows-Zip
-          path: artifacts
-      
-      - name: Download iOS Artifact (Unsigned)
-        uses: actions/download-artifact@v4
-        with:
-          name: iOS-IPA-Unsigned
           path: artifacts
       
       - name: Organize files for release
@@ -168,26 +260,21 @@ jobs:
           echo "📂 Organizing artifacts..."
           cd artifacts
           
-          # Find and organize APKs
-          find . -name "*.apk" -type f | while read apk; do
-            echo "Found APK: $apk"
-            cp "$apk" ./
+          # Find and organize all files
+          find . -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.zip" -o -name "*.tar.gz" -o -name "*.AppImage" \) | while read file; do
+            echo "Found: $file"
+            cp "$file" ./
           done
           
-          # Find and organize IPA
+          # Rename unsigned IPA
           IPA=$(find . -name "*.ipa" -type f | head -1)
           if [ -n "$IPA" ]; then
             echo "✅ Found IPA: $IPA"
             cp "$IPA" ./NoveoNative-unsigned.ipa
           fi
           
-          # Find and organize Windows ZIP
-          if [ -f "Windows-Zip/NoveoWindows.zip" ]; then
-            cp "Windows-Zip/NoveoWindows.zip" ./
-          fi
-          
           echo "📋 Files ready for release:"
-          ls -la *.apk *.ipa *.zip 2>/dev/null || true
+          ls -lah | grep -E "\.(apk|ipa|zip|tar\.gz|AppImage)$"
       
       - name: Create Release
         uses: softprops/action-gh-release@v1
@@ -195,12 +282,14 @@ jobs:
           files: |
             artifacts/*.apk
             artifacts/NoveoNative-unsigned.ipa
-            artifacts/NoveoWindows.zip
+            artifacts/NoveoNative-Windows-*.zip
+            artifacts/NoveoNative-Linux-*.tar.gz
+            artifacts/NoveoNative-Linux-*.AppImage
           generate_release_notes: true
           draft: false
           prerelease: false
 
-  # 5. SIGN iOS IPA & DEPLOY
+  # 6. SIGN iOS IPA & DEPLOY
   sign-and-deploy:
     needs: create-release
     runs-on: macos-26
@@ -356,5 +445,17 @@ jobs:
         run: |
           echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
           echo "- **Version:** ${{ needs.create-release.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Bundle ID:** ${{ steps.sign.outputs.bundle_id }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **Install:** https://pcpapc172.github.io/noveo-native-install/" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 📱 Android (4 arch)" >> $GITHUB_STEP_SUMMARY
+          echo "- arm64-v8a, armeabi-v7a, x86, x86_64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🪟 Windows (2 arch)" >> $GITHUB_STEP_SUMMARY
+          echo "- x64, arm64" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🐧 Linux (2 arch + AppImage)" >> $GITHUB_STEP_SUMMARY
+          echo "- x64 (tar.gz + AppImage), arm64 (tar.gz + AppImage)" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### 🍎 iOS" >> $GITHUB_STEP_SUMMARY
+          echo "- Signed & deployed" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Install:** https://pcpapc172.github.io/noveo-native-install/" >> $GITHUB_STEP_SUMMARY
