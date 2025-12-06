@@ -17,15 +17,12 @@ jobs:
         abi: [arm64-v8a, armeabi-v7a, x86, x86_64]
     steps:
       - uses: actions/checkout@v4
-      
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
-      
       - name: Install MAUI Workload
         run: dotnet workload install maui-android
-      
       - name: Publish APK for ${{ matrix.abi }}
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release `
@@ -39,59 +36,30 @@ jobs:
             -p:AndroidUseAapt2=true `
             -p:AndroidSupportedAbis=${{ matrix.abi }} `
             -p:AndroidCreatePackagePerAbi=true
-      
       - name: Align & Sign APK
         run: |
-          # Find the APK
           $APK = Get-ChildItem -Path "NoveoNative/bin/Release/net9.0-android/publish/" -Filter "*.apk" | Select-Object -First 1
+          if ($null -eq $APK) { Write-Host "❌ APK not found!"; exit 1 }
           
-          if ($null -eq $APK) {
-            Write-Host "❌ APK not found for ${{ matrix.abi }}!"
-            exit 1
-          }
-          
-          $APK_NAME = $APK.BaseName
-          $APK_PATH = $APK.FullName
-          
-          Write-Host "✅ Found APK: $APK_NAME"
-          Write-Host "📦 Architecture: ${{ matrix.abi }}"
-          
-          # Find zipalign dynamically from ANDROID_HOME
+          # Dynamic zipalign search
           $ZIPALIGN = Get-ChildItem -Path "$env:ANDROID_HOME\build-tools" -Filter "zipalign.exe" -Recurse | Sort-Object FullName -Descending | Select-Object -First 1
+          if ($null -eq $ZIPALIGN) { Write-Host "❌ zipalign not found!"; exit 1 }
           
-          if ($null -eq $ZIPALIGN) {
-             Write-Host "❌ zipalign.exe not found! Searching fallback..."
-             # Fallback search
-             $ZIPALIGN = Get-ChildItem -Path "C:\Program Files (x86)\Android" -Filter "zipalign.exe" -Recurse | Select-Object -First 1
-          }
-
-          if ($null -eq $ZIPALIGN) {
-             Write-Host "❌ Critical: zipalign.exe not found on runner."
-             exit 1
-          }
-
-          Write-Host "🛠 Using zipalign: $($ZIPALIGN.FullName)"
+          & "$($ZIPALIGN.FullName)" -v 4 "$($APK.FullName)" "aligned.apk"
           
-          # Align
-          & "$($ZIPALIGN.FullName)" -v 4 "$APK_PATH" "aligned.apk"
-          
-          # Create architecture-specific name
           $ABI_SHORT = "${{ matrix.abi }}" -replace "-v8a", "" -replace "armeabi-", "" -replace "x86_64", "x64"
           $SIGNED_APK = "com.companyname.noveonative-$ABI_SHORT-signed.apk"
           
-          Remove-Item "$APK_PATH"
+          Remove-Item "$($APK.FullName)"
           Rename-Item "aligned.apk" "$SIGNED_APK"
-          
-          Write-Host "✅ APK aligned and renamed: $SIGNED_APK"
           Copy-Item "$SIGNED_APK" "NoveoNative/bin/Release/net9.0-android/publish/"
-      
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Android-APK-${{ matrix.abi }}
           path: NoveoNative/bin/Release/net9.0-android/publish/*.apk
 
-  # 2. BUILD WINDOWS (MULTIPLE ARCHITECTURES)
+  # 2. BUILD WINDOWS
   build-windows:
     runs-on: windows-latest
     strategy:
@@ -99,16 +67,13 @@ jobs:
         arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
-      
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
-      
       - name: Install MAUI Workload
         run: dotnet workload install maui-windows
-      
-      - name: Publish Windows ${{ matrix.arch }}
+      - name: Publish Windows
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-windows10.0.19041.0 -c Release `
             -p:TargetFrameworks=net9.0-windows10.0.19041.0 `
@@ -117,18 +82,15 @@ jobs:
             -p:PublishSingleFile=true `
             -p:RuntimeIdentifier=win-${{ matrix.arch }} `
             --self-contained true
-      
-      - name: Zip Windows ${{ matrix.arch }} Build
-        run: |
-          powershell Compress-Archive -Path NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-${{ matrix.arch }}/publish/* -DestinationPath "NoveoNative-Windows-${{ matrix.arch }}.zip"
-      
+      - name: Zip Windows Build
+        run: powershell Compress-Archive -Path NoveoNative/bin/Release/net9.0-windows10.0.19041.0/win-${{ matrix.arch }}/publish/* -DestinationPath "NoveoNative-Windows-${{ matrix.arch }}.zip"
       - name: Upload Windows Artifact
         uses: actions/upload-artifact@v4
         with:
           name: Windows-${{ matrix.arch }}
           path: NoveoNative-Windows-${{ matrix.arch }}.zip
 
-  # 3. BUILD LINUX (MULTIPLE ARCHITECTURES + APPIMAGE)
+  # 3. BUILD LINUX
   build-linux:
     runs-on: ubuntu-latest
     strategy:
@@ -136,61 +98,49 @@ jobs:
         arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
-      
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
       
-      - name: Install dependencies for ${{ matrix.arch }}
+      # FIX: Install maui-android so 'dotnet restore' works (your csproj references Android!)
+      - name: Install Workloads
+        run: dotnet workload install maui-android
+      
+      - name: Install dependencies
         run: |
           sudo apt-get update
           sudo apt-get install -y libfuse2 libssl3
-          
           if [ "${{ matrix.arch }}" == "arm64" ]; then
             sudo apt-get install -y gcc-aarch64-linux-gnu g++-aarch64-linux-gnu
           fi
-      
-      - name: Publish Linux ${{ matrix.arch }}
+
+      - name: Publish Linux
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0 -c Release \
             -p:RuntimeIdentifier=linux-${{ matrix.arch }} \
             -p:PublishSingleFile=true \
             -p:SelfContained=true \
             -o ./linux-publish-${{ matrix.arch }}
-      
-      - name: Create AppImage for ${{ matrix.arch }}
+
+      - name: Create AppImage
         run: |
           ARCH_NAME="${{ matrix.arch }}"
-          if [ "$ARCH_NAME" == "x64" ]; then
-            ARCH_APPIMAGE="x86_64"
-          else
-            ARCH_APPIMAGE="aarch64"
-          fi
+          [ "$ARCH_NAME" == "x64" ] && ARCH_APPIMAGE="x86_64" || ARCH_APPIMAGE="aarch64"
           
-          echo "🎁 Creating AppImage for $ARCH_APPIMAGE..."
-          
-          # Create AppDir structure
-          mkdir -p AppDir/usr/bin
-          mkdir -p AppDir/usr/share/applications
-          mkdir -p AppDir/usr/share/icons/hicolor/512x512/apps
-          
-          # Copy binary
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/512x512/apps
           cp linux-publish-${{ matrix.arch }}/NoveoNative AppDir/usr/bin/
           chmod +x AppDir/usr/bin/NoveoNative
           
-          # Create desktop file
           cat > AppDir/usr/share/applications/noveonative.desktop << 'EOF'
           [Desktop Entry]
           Name=NoveoNative
-          Comment=Modern Messenger
           Exec=NoveoNative
           Type=Application
           Icon=noveonative
           Categories=Communication;
           EOF
           
-          # Create AppRun script
           cat > AppDir/AppRun << 'EOF'
           #!/bin/bash
           SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
@@ -199,21 +149,12 @@ jobs:
           EOF
           chmod +x AppDir/AppRun
           
-          # Download appimagetool
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH_APPIMAGE}.AppImage
           chmod +x appimagetool-${ARCH_APPIMAGE}.AppImage
-          
-          # Create AppImage (skip license check for automation)
           ARCH=${ARCH_APPIMAGE} ./appimagetool-${ARCH_APPIMAGE}.AppImage --appimage-extract-and-run AppDir NoveoNative-Linux-${{ matrix.arch }}.AppImage
-          
-          echo "✅ AppImage created: NoveoNative-Linux-${{ matrix.arch }}.AppImage"
-          ls -lh NoveoNative-Linux-${{ matrix.arch }}.AppImage
       
-      - name: Create Linux tarball
-        run: |
-          cd linux-publish-${{ matrix.arch }}
-          tar -czf ../NoveoNative-Linux-${{ matrix.arch }}.tar.gz .
-          cd ..
+      - name: Create Tarball
+        run: cd linux-publish-${{ matrix.arch }} && tar -czf ../NoveoNative-Linux-${{ matrix.arch }}.tar.gz .
       
       - name: Upload Linux Artifacts
         uses: actions/upload-artifact@v4
@@ -223,12 +164,11 @@ jobs:
             NoveoNative-Linux-${{ matrix.arch }}.AppImage
             NoveoNative-Linux-${{ matrix.arch }}.tar.gz
 
-  # 4. BUILD iOS (UNSIGNED)
+  # 4. BUILD iOS (FIXED RUNNER)
   build-ios:
-    runs-on: macos-latest
+    runs-on: macos-26  # ✅ Uses the runner with Xcode 26.0
     steps:
       - uses: actions/checkout@v4
-      
       - name: Setup .NET 9.0
         uses: actions/setup-dotnet@v4
         with:
@@ -239,9 +179,14 @@ jobs:
       
       - name: Publish iOS IPA
         run: |
-          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release -p:ArchiveOnBuild=true -p:RuntimeIdentifier=ios-arm64 -p:_SuppressSdkVersionCheck=true -p:CodesignKey="-" -p:CodesignProvision=""
+          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-ios -c Release \
+            -p:ArchiveOnBuild=true \
+            -p:RuntimeIdentifier=ios-arm64 \
+            -p:_SuppressSdkVersionCheck=true \
+            -p:CodesignKey="-" \
+            -p:CodesignProvision=""
       
-      - name: Upload iOS Artifact (Unsigned)
+      - name: Upload iOS Artifact
         uses: actions/upload-artifact@v4
         with:
           name: iOS-IPA-Unsigned
@@ -251,131 +196,66 @@ jobs:
   create-release:
     needs: [build-android, build-windows, build-linux, build-ios]
     runs-on: ubuntu-latest
-    outputs:
-      tag_name: ${{ steps.get_tag.outputs.tag }}
     steps:
-      - name: Get tag name
+      - name: Get tag
         id: get_tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
-      
-      - name: Download all artifacts
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           path: artifacts
-      
-      - name: Organize files for release
+      - name: Prepare Release
         run: |
-          echo "📂 Organizing artifacts..."
-          cd artifacts
+          mkdir release_files
+          find artifacts -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.zip" -o -name "*.tar.gz" -o -name "*.AppImage" \) -exec cp {} release_files/ \;
           
-          # Find and organize all files
-          find . -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.zip" -o -name "*.tar.gz" -o -name "*.AppImage" \) | while read file; do
-            echo "Found: $file"
-            cp "$file" ./
-          done
+          # Rename unsigned IPA if found
+          IPA=$(find release_files -name "*.ipa" | head -1)
+          [ -n "$IPA" ] && mv "$IPA" release_files/NoveoNative-unsigned.ipa || true
           
-          # Rename unsigned IPA
-          IPA=$(find . -name "*.ipa" -type f | head -1)
-          if [ -n "$IPA" ]; then
-            echo "✅ Found IPA: $IPA"
-            cp "$IPA" ./NoveoNative-unsigned.ipa
-          fi
-          
-          echo "📋 Files ready for release:"
-          ls -lah | grep -E "\.(apk|ipa|zip|tar\.gz|AppImage)$"
-      
       - name: Create Release
         uses: softprops/action-gh-release@v1
         with:
-          files: |
-            artifacts/*.apk
-            artifacts/NoveoNative-unsigned.ipa
-            artifacts/NoveoNative-Windows-*.zip
-            artifacts/NoveoNative-Linux-*.tar.gz
-            artifacts/NoveoNative-Linux-*.AppImage
+          files: release_files/*
           generate_release_notes: true
-          draft: false
-          prerelease: false
 
-  # 6. SIGN iOS IPA & DEPLOY
+  # 6. SIGN iOS & DEPLOY
   sign-and-deploy:
     needs: create-release
-    runs-on: macos-latest
+    runs-on: macos-26 # ✅ Uses the runner with Xcode 26.0
     steps:
-      - name: Checkout gh-pages
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
         with:
           repository: pcpapc172/noveo-native-install
           ref: gh-pages
           token: ${{ secrets.DEPLOY_TOKEN }}
       
-      - name: Download Unsigned IPA
-        uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@v4
         with:
           name: iOS-IPA-Unsigned
           path: ./ipa-download
       
-      - name: Find and Move IPA
+      - name: Sign IPA
+        id: sign
         run: |
-          echo "📂 Finding IPA..."
-          find ./ipa-download -name "*.ipa" -type f
-          
-          IPA_FILE=$(find ./ipa-download -name "*.ipa" -type f | head -1)
-          
-          if [ -z "$IPA_FILE" ]; then
-            echo "❌ No IPA found!"
-            exit 1
-          fi
-          
-          echo "✅ Found: $IPA_FILE"
-          mv "$IPA_FILE" unsigned.ipa
-          ls -la
-      
-      - name: Build Zsign
-        run: |
-          echo "📦 Building Zsign..."
           brew install pkg-config openssl minizip
           git clone https://github.com/zhlynn/zsign.git
-          cd zsign/build/macos
-          make clean && make
-          sudo cp ../../bin/zsign /usr/local/bin/
-          cd ../../..
-          rm -rf zsign
-      
-      - name: Setup Certificate & Profile
-        run: |
-          echo "🔐 Setting up certificate and profile..."
+          cd zsign/build/macos && make && sudo cp ../../bin/zsign /usr/local/bin/ && cd ../../..
+          
+          IPA_FILE=$(find ./ipa-download -name "*.ipa" | head -1)
+          mv "$IPA_FILE" unsigned.ipa
+          
           echo "${{ secrets.P12_CERTIFICATE }}" | base64 --decode > certificate.p12
           echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
           
-          echo "📋 Files created:"
-          ls -lah certificate.p12 profile.mobileprovision
-      
-      - name: Sign IPA with Zsign
-        id: sign
-        run: |
-          echo "✍️ Signing IPA..."
-          
-          /usr/local/bin/zsign -k certificate.p12 -p "${{ secrets.P12_PASSWORD }}" \
-            -m profile.mobileprovision -o NoveoNative.ipa unsigned.ipa
-          
-          if [ ! -f NoveoNative.ipa ]; then
-            echo "❌ Signing failed"
-            exit 1
-          fi
+          zsign -k certificate.p12 -p "${{ secrets.P12_PASSWORD }}" -m profile.mobileprovision -o NoveoNative.ipa unsigned.ipa
           
           SIZE=$(stat -f%z NoveoNative.ipa)
           echo "ipa_size=$SIZE" >> $GITHUB_OUTPUT
           
-          # Extract Bundle ID
-          unzip -q NoveoNative.ipa -d temp_extract
-          APP_PATH=$(find temp_extract/Payload -name "*.app" -type d -depth 1 | head -1)
-          BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw "$APP_PATH/Info.plist" 2>/dev/null || echo "com.etisalat.INDY")
-          rm -rf temp_extract
-          
+          unzip -q NoveoNative.ipa -d temp
+          BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw "temp/Payload/NoveoNative.app/Info.plist")
           echo "bundle_id=$BUNDLE_ID" >> $GITHUB_OUTPUT
-          rm -f certificate.p12 profile.mobileprovision unsigned.ipa
-      
+          
       - name: Update manifest.plist
         run: |
           cat > manifest.plist << EOF
@@ -411,7 +291,7 @@ jobs:
           </dict>
           </plist>
           EOF
-      
+
       - name: Update apps.json
         run: |
           cat > apps.json << EOF
@@ -437,11 +317,8 @@ jobs:
             ]
           }
           EOF
-      
-      - name: Save version
-        run: echo "${{ needs.create-release.outputs.tag_name }}" > version.txt
-      
-      - name: Commit and push
+          
+      - name: Commit & Push
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
