@@ -219,7 +219,7 @@
             </CollectionView>
         </Grid>
 
-        <!-- ✅ FIXED: Edit Mode Bar (NEW) -->
+        <!-- FIXED: Edit Mode Bar (NEW) -->
         <Grid Grid.Row="2" BackgroundColor="#f59e0b" Padding="10" IsVisible="{Binding IsEditing}">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
