@@ -264,7 +264,9 @@ jobs:
             ]
           }
           EOF
-          
+      - name: Update version.txt
+        run: echo "${{ needs.create-release.outputs.tag }}" > version.txt
+
       - name: Cleanup & Commit
         run: |
           # CRITICAL: Delete sensitive files BEFORE adding to git
