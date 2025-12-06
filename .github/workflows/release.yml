@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  # 1. BUILD ANDROID (Universal + Splits)
+  # 1. BUILD ANDROID (Universal)
   build-android:
     runs-on: windows-latest
     steps:
@@ -19,7 +19,6 @@ jobs:
           dotnet-version: 9.0.x
       - run: dotnet workload install maui-android
       
-      # A. Build Universal APK (Fat APK)
       - name: Publish Universal APK
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release `
@@ -34,18 +33,20 @@ jobs:
             
       - name: Move Universal APK
         run: |
-          $APK = Get-ChildItem -Path "NoveoNative/bin/Release/net9.0-android/publish/" -Filter "*.apk" | Select-Object -First 1
-          if ($APK) { 
-            Rename-Item "$($APK.FullName)" "NoveoNative-Universal-Unsigned.apk"
-            Move-Item "NoveoNative-Universal-Unsigned.apk" "NoveoNative/"
+          # Look inside the publish folder
+          $PUBLISH_DIR = "NoveoNative/bin/Release/net9.0-android/publish/"
+          $APK = Get-ChildItem -Path $PUBLISH_DIR -Filter "*.apk" | Select-Object -First 1
+          
+          if ($null -eq $APK) { 
+            Write-Error "❌ APK not found in $PUBLISH_DIR"
+            exit 1 
           }
           
-      # B. Build Splits (Optional, but good for optimization. If you only want Universal, you can remove this block. I will keep it for completeness but rename artifacts)
-      # For speed, let's just do Universal if that is what you requested mostly.
-      # "also make a universal version" implies keep both? I'll stick to just Universal to save build time if you prefer, but let's do just Universal now to simplify.
-      # Re-reading: "also make a universal version". I will KEEP splits if easy, but the previous build replaced them.
-      # Let's just build Universal to ensure we have the "one file to rule them all".
-      
+          Write-Host "✅ Found APK at: $($APK.FullName)"
+          
+          # Move directly from source path to destination
+          Move-Item -Path "$($APK.FullName)" -Destination "NoveoNative/NoveoNative-Universal-Unsigned.apk" -Force
+          
       - uses: actions/upload-artifact@v4
         with:
           name: Android-Universal
@@ -81,7 +82,7 @@ jobs:
           name: Windows-${{ matrix.arch }}
           path: NoveoNative-Windows-${{ matrix.arch }}.zip
 
-  # 3. BUILD macOS (FIXED)
+  # 3. BUILD macOS (Fixed Path Logic)
   build-macos:
     runs-on: macos-26
     steps:
@@ -102,22 +103,26 @@ jobs:
             
       - name: Find and Zip App
         run: |
-          # Find the .app folder anywhere in bin/
+          # Robustly find the .app folder
           APP_PATH=$(find NoveoNative/bin -name "NoveoNative.app" -type d | head -n 1)
+          
           if [ -z "$APP_PATH" ]; then
-            echo "❌ .app not found!"
+            echo "❌ NoveoNative.app NOT FOUND in bin directory!"
+            find NoveoNative/bin -maxdepth 4 # Print structure for debugging
             exit 1
           fi
           
           echo "✅ Found app at: $APP_PATH"
+          
+          # Go to parent directory to zip recursively
           PARENT_DIR=$(dirname "$APP_PATH")
           APP_NAME=$(basename "$APP_PATH")
           
           cd "$PARENT_DIR"
           zip -r NoveoNative-macOS-arm64.zip "$APP_NAME"
           
-          # Move to a known location for upload
-          mv NoveoNative-macOS-arm64.zip $GITHUB_WORKSPACE/NoveoNative-macOS-arm64.zip
+          # Move zip to workspace root for upload
+          mv NoveoNative-macOS-arm64.zip $GITHUB_WORKSPACE/
           
       - uses: actions/upload-artifact@v4
         with:
@@ -161,10 +166,12 @@ jobs:
       - name: Prepare Release
         run: |
           mkdir release_files
-          # Gather all artifacts
+          # Gather all artifacts recursively
           find artifacts -type f \( -name "*.apk" -o -name "*.ipa" -o -name "*.zip" \) -exec cp {} release_files/ \;
           
-          # Rename generic apk to universal if needed (already named in build step)
+          # Rename unsigned IPA if found for clarity
+          IPA=$(find release_files -name "*.ipa" | head -1)
+          [ -n "$IPA" ] && mv "$IPA" release_files/NoveoNative-unsigned.ipa || true
           
       - uses: softprops/action-gh-release@v1
         with:
