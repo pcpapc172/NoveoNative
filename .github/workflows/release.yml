@@ -135,6 +135,8 @@ jobs:
   create-release:
     needs: [build-android, build-windows, build-macos, build-ios]
     runs-on: ubuntu-latest
+    outputs:
+      tag: ${{ steps.get_tag.outputs.tag }}
     steps:
       - id: get_tag
         run: echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
@@ -153,7 +155,7 @@ jobs:
           files: release_files/*
           generate_release_notes: true
 
-  # 6. SIGN iOS & DEPLOY (FIXED & SECURE)
+  # 6. SIGN iOS & DEPLOY
   sign-and-deploy:
     needs: create-release
     runs-on: macos-26
@@ -162,40 +164,34 @@ jobs:
         with:
           repository: pcpapc172/noveo-native-install
           ref: gh-pages
-          token: ${{ secrets.DEPLOY_TOKEN }}
-      
-      # CLEANUP STEP: Remove junk from previous failed deploys
-      - name: Clean Repository
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Clean Repo
         run: |
-          echo "Cleaning up accidental files..."
           git rm -rf --ignore-unmatch zsign temp certificate.p12 profile.mobileprovision unsigned.ipa ipa-download NoveoNative || true
           rm -rf zsign temp certificate.p12 profile.mobileprovision unsigned.ipa ipa-download NoveoNative
-      
+
       - uses: actions/download-artifact@v4
         with:
           name: iOS-IPA-Unsigned
-          path: ./ipa-download
-      
+          path: ipa-download
+
       - name: Sign IPA
         id: sign
         run: |
+          set -x
           brew install pkg-config openssl minizip
-          
-          # Clone zsign
           git clone https://github.com/zhlynn/zsign.git
           cd zsign/build/macos && make && sudo cp ../../bin/zsign /usr/local/bin/ && cd ../../..
           
           IPA_FILE=$(find ./ipa-download -name "*.ipa" | head -1)
           cp "$IPA_FILE" unsigned.ipa
           
-          # Write secrets
           echo "${{ secrets.P12_CERTIFICATE }}" | base64 --decode > certificate.p12
           echo "${{ secrets.PROVISIONING_PROFILE }}" | base64 --decode > profile.mobileprovision
           
-          # Sign
           zsign -k certificate.p12 -p "${{ secrets.P12_PASSWORD }}" -m profile.mobileprovision -o NoveoNative.ipa unsigned.ipa
           
-          # Get Info
           SIZE=$(stat -f%z NoveoNative.ipa)
           echo "ipa_size=$SIZE" >> $GITHUB_OUTPUT
           
@@ -203,79 +199,81 @@ jobs:
           BUNDLE_ID=$(plutil -extract CFBundleIdentifier raw "temp/Payload/NoveoNative.app/Info.plist")
           echo "bundle_id=$BUNDLE_ID" >> $GITHUB_OUTPUT
 
-      - name: Update manifest.plist
-        run: |
-          cat > manifest.plist << EOF
-          <?xml version="1.0" encoding="UTF-8"?>
-          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-          <plist version="1.0">
-          <dict>
-              <key>items</key>
-              <array>
-                  <dict>
-                      <key>assets</key>
-                      <array>
-                          <dict>
-                              <key>kind</key>
-                              <string>software-package</string>
-                              <key>url</key>
-                              <string>https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa</string>
-                          </dict>
-                      </array>
-                      <key>metadata</key>
-                      <dict>
-                          <key>bundle-identifier</key>
-                          <string>${{ steps.sign.outputs.bundle_id }}</string>
-                          <key>bundle-version</key>
-                          <string>${{ needs.create-release.outputs.tag_name }}</string>
-                          <key>kind</key>
-                          <string>software</string>
-                          <key>title</key>
-                          <string>NoveoNative</string>
-                      </dict>
-                  </dict>
-              </array>
-          </dict>
-          </plist>
-          EOF
-
-      - name: Update apps.json
-        run: |
-          cat > apps.json << EOF
-          {
-            "name": "NoveoNative Repository",
-            "identifier": "com.noveo.repo",
-            "sourceURL": "https://pcpapc172.github.io/noveo-native-install/apps.json",
-            "apps": [
-              {
-                "name": "NoveoNative",
-                "bundleIdentifier": "${{ steps.sign.outputs.bundle_id }}",
-                "developerName": "PCPA",
-                "subtitle": "Modern Messenger for iOS",
-                "version": "${{ needs.create-release.outputs.tag_name }}",
-                "versionDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
-                "versionDescription": "Latest release",
-                "downloadURL": "https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa",
-                "localizedDescription": "Modern messaging app",
-                "iconURL": "https://pcpapc172.github.io/noveo-native-install/assets/icon512.png",
-                "tintColor": "#3b82f6",
-                "size": ${{ steps.sign.outputs.ipa_size }}
-              }
-            ]
-          }
-          EOF
-      - name: Update version.txt
+      - name: Write version.txt
         run: echo "${{ needs.create-release.outputs.tag }}" > version.txt
+
+      - name: Write manifest.plist
+        run: |
+          TAG="${{ needs.create-release.outputs.tag }}"
+          BID="${{ steps.sign.outputs.bundle_id }}"
+          cat > manifest.plist << 'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>items</key>
+	<array>
+		<dict>
+			<key>assets</key>
+			<array>
+				<dict>
+					<key>kind</key>
+					<string>software-package</string>
+					<key>url</key>
+					<string>https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa</string>
+				</dict>
+			</array>
+			<key>metadata</key>
+			<dict>
+				<key>bundle-identifier</key>
+				<string>$BID</string>
+				<key>bundle-version</key>
+				<string>$TAG</string>
+				<key>kind</key>
+				<string>software</string>
+				<key>title</key>
+				<string>NoveoNative</string>
+			</dict>
+		</dict>
+	</array>
+</dict>
+</plist>
+PLIST
+
+      - name: Write apps.json
+        run: |
+          TAG="${{ needs.create-release.outputs.tag }}"
+          BID="${{ steps.sign.outputs.bundle_id }}"
+          SZ="${{ steps.sign.outputs.ipa_size }}"
+          cat > apps.json << 'JSON'
+{
+  "name": "NoveoNative Repository",
+  "identifier": "com.noveo.repo",
+  "sourceURL": "https://pcpapc172.github.io/noveo-native-install/apps.json",
+  "apps": [
+    {
+      "name": "NoveoNative",
+      "bundleIdentifier": "$BID",
+      "developerName": "PCPA",
+      "subtitle": "Modern Messenger for iOS",
+      "version": "$TAG",
+      "versionDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+      "versionDescription": "Latest release",
+      "downloadURL": "https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa",
+      "localizedDescription": "Modern messaging app",
+      "size": $SZ
+    }
+  ]
+}
+JSON
 
       - name: Cleanup & Commit
         run: |
-          # CRITICAL: Delete sensitive files BEFORE adding to git
           rm -rf zsign temp certificate.p12 profile.mobileprovision unsigned.ipa ipa-download NoveoNative
           
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           
-          # Add only what we want, or add . safely now that junk is gone
           git add .
-          git commit -m "🚀 Deploy ${{ needs.create-release.outputs.tag_name }}"
+          git commit -m "🚀 Deploy ${{ needs.create-release.outputs.tag }}"
           git push origin gh-pages
