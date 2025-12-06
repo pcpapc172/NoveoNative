@@ -10,35 +10,20 @@ permissions:
 
 jobs:
 
-  # 1. BUILD ANDROID (6 APKs)
+  # 1. BUILD ANDROID
   build-android:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
-
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 9.0.x
-
       - run: dotnet workload install maui-android
 
-      # ✅ Per-ABI APKs (arm32, arm64, x86, x86_64)
-      - name: Publish Per-ABI APKs
-        run: |
-          dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release `
-            -p:AndroidPackageFormat=apk `
-            -p:AndroidKeyStore=false `
-            -p:RunAOTCompilation=false `
-            -p:AndroidLinkMode=None `
-            -p:PublishTrimmed=false `
-            -p:AndroidUseAapt2=true `
-            -p:AndroidCreatePackagePerAbi=true `
-            -p:RuntimeIdentifiers=android-arm;android-arm64;android-x86;android-x64
-
-      # ✅ Universal APK
       - name: Publish Universal APK
         run: |
           dotnet publish NoveoNative/NoveoNative.csproj -f net9.0-android -c Release `
+            -p:TargetFrameworks=net9.0-android `
             -p:AndroidPackageFormat=apk `
             -p:AndroidKeyStore=false `
             -p:RunAOTCompilation=false `
@@ -47,33 +32,17 @@ jobs:
             -p:AndroidUseAapt2=true `
             -p:AndroidCreatePackagePerAbi=false
 
-      # ✅ Collect & Rename APKs (6 outputs)
-      - name: Collect APKs
+      - name: Move Universal APK
         run: |
-          $OUT = "android-apks"
-          mkdir $OUT
+          $PUBLISH_DIR = "NoveoNative/bin/Release/net9.0-android/publish/"
+          $APK = Get-ChildItem -Path $PUBLISH_DIR -Filter "*.apk" | Select-Object -First 1
+          if ($null -eq $APK) { Write-Error "❌ APK not found"; exit 1 }
+          Move-Item -Path "$($APK.FullName)" -Destination "NoveoNative/NoveoNative-Universal-Unsigned.apk" -Force
 
-          Get-ChildItem -Recurse NoveoNative/bin/Release/net9.0-android -Filter "*.apk" | ForEach-Object {
-            $n = $_.Name.ToLower()
-
-            if ($n -match "arm64") { Copy-Item $_ "$OUT/NoveoNative-arm64-Unsigned.apk" }
-            elseif ($n -match "arm") { Copy-Item $_ "$OUT/NoveoNative-arm32-Unsigned.apk" }
-            elseif ($n -match "x86_64|x64") { Copy-Item $_ "$OUT/NoveoNative-x86_64-Unsigned.apk" }
-            elseif ($n -match "x86") { Copy-Item $_ "$OUT/NoveoNative-x86-Unsigned.apk" }
-            else { Copy-Item $_ "$OUT/NoveoNative-Universal-Unsigned.apk" }
-          }
-
-          # ✅ Fake "x64" as duplicate of x86_64 (Android limitation)
-          Copy-Item "$OUT/NoveoNative-x86_64-Unsigned.apk" "$OUT/NoveoNative-x64-Unsigned.apk"
-
-          dir $OUT
-
-      # ✅ Upload ALL 6 APKs
       - uses: actions/upload-artifact@v4
         with:
-          name: Android-6APKs
-          path: android-apks/*.apk
-
+          name: Android-Universal
+          path: NoveoNative/NoveoNative-Universal-Unsigned.apk
 
 
   # 2. BUILD WINDOWS
