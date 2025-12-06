@@ -56,16 +56,24 @@ jobs:
           Write-Host "✅ Found APK: $APK_NAME"
           Write-Host "📦 Architecture: ${{ matrix.abi }}"
           
-          # Align APK
-          $ANDROID_HOME = "C:\Users\${{ env:USERNAME }}\AppData\Local\Android\sdk"
-          $ZIPALIGN = "$ANDROID_HOME\build-tools\34.0.0\zipalign.exe"
+          # Find zipalign dynamically from ANDROID_HOME
+          $ZIPALIGN = Get-ChildItem -Path "$env:ANDROID_HOME\build-tools" -Filter "zipalign.exe" -Recurse | Sort-Object FullName -Descending | Select-Object -First 1
           
-          if (-not (Test-Path $ZIPALIGN)) {
-            Write-Host "⚠️ zipalign not found, trying alternative path..."
-            $ZIPALIGN = "$ANDROID_HOME\build-tools\35.0.0\zipalign.exe"
+          if ($null -eq $ZIPALIGN) {
+             Write-Host "❌ zipalign.exe not found! Searching fallback..."
+             # Fallback search
+             $ZIPALIGN = Get-ChildItem -Path "C:\Program Files (x86)\Android" -Filter "zipalign.exe" -Recurse | Select-Object -First 1
           }
+
+          if ($null -eq $ZIPALIGN) {
+             Write-Host "❌ Critical: zipalign.exe not found on runner."
+             exit 1
+          }
+
+          Write-Host "🛠 Using zipalign: $($ZIPALIGN.FullName)"
           
-          & $ZIPALIGN -v 4 "$APK_PATH" "aligned.apk"
+          # Align
+          & "$($ZIPALIGN.FullName)" -v 4 "$APK_PATH" "aligned.apk"
           
           # Create architecture-specific name
           $ABI_SHORT = "${{ matrix.abi }}" -replace "-v8a", "" -replace "armeabi-", "" -replace "x86_64", "x64"
@@ -120,7 +128,7 @@ jobs:
           name: Windows-${{ matrix.arch }}
           path: NoveoNative-Windows-${{ matrix.arch }}.zip
 
-  # 3. BUILD LINUX (MULTIPLE ARCHITECTURES)
+  # 3. BUILD LINUX (MULTIPLE ARCHITECTURES + APPIMAGE)
   build-linux:
     runs-on: ubuntu-latest
     strategy:
@@ -195,8 +203,8 @@ jobs:
           wget -q https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-${ARCH_APPIMAGE}.AppImage
           chmod +x appimagetool-${ARCH_APPIMAGE}.AppImage
           
-          # Create AppImage
-          ./appimagetool-${ARCH_APPIMAGE}.AppImage AppDir NoveoNative-Linux-${{ matrix.arch }}.AppImage
+          # Create AppImage (skip license check for automation)
+          ARCH=${ARCH_APPIMAGE} ./appimagetool-${ARCH_APPIMAGE}.AppImage --appimage-extract-and-run AppDir NoveoNative-Linux-${{ matrix.arch }}.AppImage
           
           echo "✅ AppImage created: NoveoNative-Linux-${{ matrix.arch }}.AppImage"
           ls -lh NoveoNative-Linux-${{ matrix.arch }}.AppImage
@@ -217,7 +225,7 @@ jobs:
 
   # 4. BUILD iOS (UNSIGNED)
   build-ios:
-    runs-on: macos-26
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
       
@@ -292,7 +300,7 @@ jobs:
   # 6. SIGN iOS IPA & DEPLOY
   sign-and-deploy:
     needs: create-release
-    runs-on: macos-26
+    runs-on: macos-latest
     steps:
       - name: Checkout gh-pages
         uses: actions/checkout@v4
@@ -440,22 +448,3 @@ jobs:
           git add .
           git commit -m "🚀 Deploy ${{ needs.create-release.outputs.tag_name }}"
           git push origin gh-pages
-      
-      - name: Summary
-        run: |
-          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
-          echo "- **Version:** ${{ needs.create-release.outputs.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 📱 Android (4 arch)" >> $GITHUB_STEP_SUMMARY
-          echo "- arm64-v8a, armeabi-v7a, x86, x86_64" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🪟 Windows (2 arch)" >> $GITHUB_STEP_SUMMARY
-          echo "- x64, arm64" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🐧 Linux (2 arch + AppImage)" >> $GITHUB_STEP_SUMMARY
-          echo "- x64 (tar.gz + AppImage), arm64 (tar.gz + AppImage)" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### 🍎 iOS" >> $GITHUB_STEP_SUMMARY
-          echo "- Signed & deployed" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**Install:** https://pcpapc172.github.io/noveo-native-install/" >> $GITHUB_STEP_SUMMARY
