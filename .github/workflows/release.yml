@@ -206,39 +206,41 @@ jobs:
         run: |
           TAG="${{ needs.create-release.outputs.tag }}"
           BID="${{ steps.sign.outputs.bundle_id }}"
-          cat > manifest.plist << 'PLIST'
-<?xml version="1.0" encoding="UTF-8"?>
-<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
-<plist version="1.0">
-<dict>
-<key>items</key>
-<array>
-<dict>
-<key>assets</key>
-<array>
-<dict>
-<key>kind</key>
-<string>software-package</string>
-<key>url</key>
-<string>https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa</string>
-</dict>
-</array>
-<key>metadata</key>
-<dict>
-<key>bundle-identifier</key>
-<string>$BID</string>
-<key>bundle-version</key>
-<string>$TAG</string>
-<key>kind</key>
-<string>software</string>
-<key>title</key>
-<string>NoveoNative</string>
-</dict>
-</dict>
-</array>
-</dict>
-</plist>
-PLIST
+
+          cat > manifest.plist << PLIST
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>items</key>
+            <array>
+              <dict>
+                <key>assets</key>
+                <array>
+                  <dict>
+                    <key>kind</key>
+                    <string>software-package</string>
+                    <key>url</key>
+                    <string>https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa</string>
+                  </dict>
+                </array>
+                <key>metadata</key>
+                <dict>
+                  <key>bundle-identifier</key>
+                  <string>$BID</string>
+                  <key>bundle-version</key>
+                  <string>$TAG</string>
+                  <key>kind</key>
+                  <string>software</string>
+                  <key>title</key>
+                  <string>NoveoNative</string>
+                </dict>
+              </dict>
+            </array>
+          </dict>
+          </plist>
+          PLIST
+
 
       - name: Write apps.json
         run: |
@@ -246,27 +248,29 @@ PLIST
           BID="${{ steps.sign.outputs.bundle_id }}"
           SZ="${{ steps.sign.outputs.ipa_size }}"
           VERSION_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
-          cat > apps.json << 'JSON'
-{
-  "name": "NoveoNative Repository",
-  "identifier": "com.noveo.repo",
-  "sourceURL": "https://pcpapc172.github.io/noveo-native-install/apps.json",
-  "apps": [
-    {
-      "name": "NoveoNative",
-      "bundleIdentifier": "$BID",
-      "developerName": "PCPA",
-      "subtitle": "Modern Messenger for iOS",
-      "version": "$TAG",
-      "versionDate": "$VERSION_DATE",
-      "versionDescription": "Latest release",
-      "downloadURL": "https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa",
-      "localizedDescription": "Modern messaging app",
-      "size": $SZ
-    }
-  ]
-}
-JSON
+
+          cat > apps.json << JSON
+          {
+            "name": "NoveoNative Repository",
+            "identifier": "com.noveo.repo",
+            "sourceURL": "https://pcpapc172.github.io/noveo-native-install/apps.json",
+            "apps": [
+              {
+                "name": "NoveoNative",
+                "bundleIdentifier": "$BID",
+                "developerName": "PCPA",
+                "subtitle": "Modern Messenger for iOS",
+                "version": "$TAG",
+                "versionDate": "$VERSION_DATE",
+                "versionDescription": "Latest release",
+                "downloadURL": "https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa",
+                "localizedDescription": "Modern messaging app",
+                "size": $SZ
+              }
+            ]
+          }
+          JSON
+
 
       - name: Cleanup & Commit
         run: |
