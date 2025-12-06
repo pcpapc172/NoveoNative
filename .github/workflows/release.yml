@@ -245,6 +245,7 @@ PLIST
           TAG="${{ needs.create-release.outputs.tag }}"
           BID="${{ steps.sign.outputs.bundle_id }}"
           SZ="${{ steps.sign.outputs.ipa_size }}"
+          VERSION_DATE=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
           cat > apps.json << 'JSON'
 {
   "name": "NoveoNative Repository",
@@ -257,7 +258,7 @@ PLIST
       "developerName": "PCPA",
       "subtitle": "Modern Messenger for iOS",
       "version": "$TAG",
-      "versionDate": "$(date -u +"%Y-%m-%dT%H:%M:%SZ")",
+      "versionDate": "$VERSION_DATE",
       "versionDescription": "Latest release",
       "downloadURL": "https://pcpapc172.github.io/noveo-native-install/NoveoNative.ipa",
       "localizedDescription": "Modern messaging app",
