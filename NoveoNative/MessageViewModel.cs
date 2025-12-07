@@ -1,6 +1,7 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Input;
+using System.Text.RegularExpressions;
 
 namespace NoveoNative;
 
@@ -24,6 +25,77 @@ public class MessageViewModel : INotifyPropertyChanged
 
     // ✅ NEW: Can edit only text messages without files/themes
     public bool CanEdit => !IsTheme && !IsImage && !IsVideo && !IsAudio && !ShowGenericFile;
+
+    // ✅ NEW: Parse username with tag format: "Username [#COLOR, "TAG"]"
+    public FormattedString SenderNameFormatted
+    {
+        get
+        {
+            var formatted = new FormattedString();
+            if (string.IsNullOrEmpty(SenderName))
+            {
+                formatted.Spans.Add(new Span { Text = "Unknown", TextColor = SenderColor });
+                return formatted;
+            }
+
+            // Regex to match: "Username [#COLOR, "TAG"]"
+            var tagRegex = new Regex(@"^(.*?)\s*\[\s*#([0-9a-fA-F]{3,6})\s*,\s*""([^""]+)""\s*\]$");
+            var match = tagRegex.Match(SenderName);
+
+            if (match.Success)
+            {
+                // Display name
+                var displayName = match.Groups[1].Value.Trim();
+                formatted.Spans.Add(new Span
+                {
+                    Text = displayName + " ",
+                    TextColor = SenderColor,
+                    FontAttributes = FontAttributes.Bold
+                });
+
+                // Tag with color
+                var colorHex = "#" + match.Groups[2].Value;
+                var tagText = match.Groups[3].Value;
+
+                try
+                {
+                    var tagColor = Color.FromArgb(colorHex);
+                    formatted.Spans.Add(new Span
+                    {
+                        Text = tagText,
+                        TextColor = Colors.White,
+                        BackgroundColor = tagColor,
+                        FontSize = 10,
+                        FontAttributes = FontAttributes.Bold
+                    });
+                }
+                catch
+                {
+                    // Fallback if color is invalid
+                    formatted.Spans.Add(new Span
+                    {
+                        Text = tagText,
+                        TextColor = Colors.White,
+                        BackgroundColor = Color.FromArgb("#3b82f6"),
+                        FontSize = 10,
+                        FontAttributes = FontAttributes.Bold
+                    });
+                }
+            }
+            else
+            {
+                // No tag, just display name
+                formatted.Spans.Add(new Span
+                {
+                    Text = SenderName,
+                    TextColor = SenderColor,
+                    FontAttributes = FontAttributes.Bold
+                });
+            }
+
+            return formatted;
+        }
+    }
 
     // FormattedString with @mention detection
     public FormattedString MessageFormatted
@@ -200,6 +272,7 @@ public class MessageViewModel : INotifyPropertyChanged
         OnPropertyChanged(nameof(ReplyQuoteColor));
         OnPropertyChanged(nameof(AttachmentBgColor));
         OnPropertyChanged(nameof(MessageFormatted));
+        OnPropertyChanged(nameof(SenderNameFormatted));
     }
 
     private void OnOpenDM()

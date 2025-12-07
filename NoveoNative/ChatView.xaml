@@ -154,7 +154,7 @@
         </ResourceDictionary>
     </ContentView.Resources>
 
-    
+
     <Grid RowDefinitions="Auto,*,Auto,Auto,Auto">
 
         <!-- FIXED: Single unified header bar -->

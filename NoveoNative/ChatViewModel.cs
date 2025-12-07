@@ -1,12 +1,98 @@
 ﻿using System.ComponentModel;
 using System.Runtime.CompilerServices;
+using System.Text.RegularExpressions;
 
 namespace NoveoNative
 {
     public class ChatViewModel : INotifyPropertyChanged
     {
         public string ChatId { get; set; } = "";
-        public string DisplayName { get; set; } = "";
+
+        private string _displayName = "";
+        public string DisplayName
+        {
+            get => _displayName;
+            set
+            {
+                _displayName = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(DisplayNameFormatted));
+            }
+        }
+
+        // ✅ NEW: Parse username with tag format for chat list
+        public FormattedString DisplayNameFormatted
+        {
+            get
+            {
+                var formatted = new FormattedString();
+                if (string.IsNullOrEmpty(_displayName))
+                {
+                    formatted.Spans.Add(new Span { Text = "Unknown", TextColor = DisplayTextColor });
+                    return formatted;
+                }
+
+                // Regex to match: "Username [#COLOR, "TAG"]"
+                var tagRegex = new Regex(@"^(.*?)\s*\[\s*#([0-9a-fA-F]{3,6})\s*,\s*""([^""]+)""\s*\]$");
+                var match = tagRegex.Match(_displayName);
+
+                if (match.Success)
+                {
+                    // Display name
+                    var displayNamePart = match.Groups[1].Value.Trim();
+                    formatted.Spans.Add(new Span
+                    {
+                        Text = displayNamePart + " ",
+                        TextColor = DisplayTextColor,
+                        FontAttributes = FontAttributes.Bold,
+                        FontSize = 18
+                    });
+
+                    // Tag with color
+                    var colorHex = "#" + match.Groups[2].Value;
+                    var tagText = match.Groups[3].Value;
+
+                    try
+                    {
+                        var tagColor = Color.FromArgb(colorHex);
+                        formatted.Spans.Add(new Span
+                        {
+                            Text = tagText,
+                            TextColor = Colors.White,
+                            BackgroundColor = tagColor,
+                            FontSize = 10,
+                            FontAttributes = FontAttributes.Bold
+                        });
+                    }
+                    catch
+                    {
+                        // Fallback if color is invalid
+                        formatted.Spans.Add(new Span
+                        {
+                            Text = tagText,
+                            TextColor = Colors.White,
+                            BackgroundColor = Color.FromArgb("#3b82f6"),
+                            FontSize = 10,
+                            FontAttributes = FontAttributes.Bold
+                        });
+                    }
+                }
+                else
+                {
+                    // No tag, just display name
+                    formatted.Spans.Add(new Span
+                    {
+                        Text = _displayName,
+                        TextColor = DisplayTextColor,
+                        FontAttributes = FontAttributes.Bold,
+                        FontSize = 18
+                    });
+                }
+
+                return formatted;
+            }
+        }
+
         public string AvatarLetter { get; set; } = "";
         public string AvatarUrl { get; set; } = "";
         public string LastMessagePreview { get; set; } = "";
@@ -58,7 +144,11 @@ namespace NoveoNative
             }
         }
 
-        public void RefreshColor() => OnPropertyChanged(nameof(DisplayTextColor));
+        public void RefreshColor()
+        {
+            OnPropertyChanged(nameof(DisplayTextColor));
+            OnPropertyChanged(nameof(DisplayNameFormatted));
+        }
 
         public event PropertyChangedEventHandler? PropertyChanged;
         protected void OnPropertyChanged([CallerMemberName] string? name = null)
