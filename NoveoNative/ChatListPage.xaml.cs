@@ -146,11 +146,49 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
                 .ThenByDescending(x => x.IsOnline)
                 .ToList();
 
-            Chats.Clear();
-            foreach (var item in sorted) Chats.Add(item);
+            var existingMap = Chats.ToDictionary(c => c.ChatId);
+
+            for (int i = 0; i < sorted.Count; i++)
+            {
+                var item = sorted[i];
+                if (existingMap.TryGetValue(item.ChatId, out var existing))
+                {
+                    UpdateChatViewModel(existing, item);
+
+                    var currentIndex = Chats.IndexOf(existing);
+                    if (currentIndex != i)
+                    {
+                        Chats.RemoveAt(currentIndex);
+                        Chats.Insert(i, existing);
+                    }
+
+                    existingMap.Remove(item.ChatId);
+                }
+                else
+                {
+                    Chats.Insert(i, item);
+                }
+            }
+
+            foreach (var leftover in existingMap.Values)
+            {
+                Chats.Remove(leftover);
+            }
 
             if (Chats.Count == 0) IsListEmpty = true;
         });
+    }
+
+    private void UpdateChatViewModel(ChatViewModel target, ChatViewModel source)
+    {
+        target.DisplayName = source.DisplayName;
+        target.AvatarUrl = source.AvatarUrl;
+        target.AvatarLetter = source.AvatarLetter;
+        target.LastMessagePreview = source.LastMessagePreview;
+        target.IsChannel = source.IsChannel;
+        target.IsPrivate = source.IsPrivate;
+        target.OtherUserId = source.OtherUserId;
+        target.IsOnline = source.IsOnline;
     }
 
     private void OnToggleLoginMode(object sender, EventArgs e)

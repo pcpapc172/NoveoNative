@@ -93,9 +93,39 @@ namespace NoveoNative
             }
         }
 
-        public string AvatarLetter { get; set; } = "";
-        public string AvatarUrl { get; set; } = "";
-        public string LastMessagePreview { get; set; } = "";
+        private string _avatarLetter = "";
+        public string AvatarLetter
+        {
+            get => _avatarLetter;
+            set
+            {
+                _avatarLetter = value;
+                OnPropertyChanged();
+            }
+        }
+
+        private string _avatarUrl = "";
+        public string AvatarUrl
+        {
+            get => _avatarUrl;
+            set
+            {
+                _avatarUrl = value;
+                OnPropertyChanged();
+                OnPropertyChanged(nameof(HasAvatarUrl));
+            }
+        }
+
+        private string _lastMessagePreview = "";
+        public string LastMessagePreview
+        {
+            get => _lastMessagePreview;
+            set
+            {
+                _lastMessagePreview = value;
+                OnPropertyChanged();
+            }
+        }
 
         // Logic Flags
         public bool IsPrivate { get; set; }
