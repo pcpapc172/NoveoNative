@@ -179,6 +179,18 @@ foreach (var leftover in existingMap.Values)
         });
     }
 
+    private void UpdateChatViewModel(ChatViewModel target, ChatViewModel source)
+    {
+        target.DisplayName = source.DisplayName;
+        target.AvatarUrl = source.AvatarUrl;
+        target.AvatarLetter = source.AvatarLetter;
+        target.LastMessagePreview = source.LastMessagePreview;
+        target.IsChannel = source.IsChannel;
+        target.IsPrivate = source.IsPrivate;
+        target.OtherUserId = source.OtherUserId;
+        target.IsOnline = source.IsOnline;
+    }
+
     private void OnToggleLoginMode(object sender, EventArgs e)
     {
         _isRegisterMode = !_isRegisterMode;
