@@ -146,8 +146,34 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
                 .ThenByDescending(x => x.IsOnline)
                 .ToList();
 
-            Chats.Clear();
-            foreach (var item in sorted) Chats.Add(item);
+            var existingMap = Chats.ToDictionary(c => c.ChatId);
+
+for (int i = 0; i < sorted.Count; i++)
+{
+    var item = sorted[i];
+    if (existingMap.TryGetValue(item.ChatId, out var existing))
+    {
+        UpdateChatViewModel(existing, item);
+
+        var currentIndex = Chats.IndexOf(existing);
+        if (currentIndex != i)
+        {
+            Chats.RemoveAt(currentIndex);
+            Chats.Insert(i, existing);
+        }
+
+        existingMap.Remove(item.ChatId);
+    }
+    else
+    {
+        Chats.Insert(i, item);
+    }
+}
+
+foreach (var leftover in existingMap.Values)
+{
+    Chats.Remove(leftover);
+}
 
             if (Chats.Count == 0) IsListEmpty = true;
         });
@@ -287,3 +313,4 @@ public partial class ChatListPage : ContentPage, INotifyPropertyChanged
     protected void OnPropertyChanged([CallerMemberName] string? name = null) =>
         PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(name));
 }
+
